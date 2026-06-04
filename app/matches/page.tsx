@@ -140,7 +140,7 @@ export default function MatchesPage() {
           <p className="text-xs font-black uppercase tracking-widest text-slate-500">Buscando Confrontos...</p>
         </div>
       ) : (
-        <main className="max-w-7xl mx-auto p-6 md:p-12">
+        <main className="max-w-7xl mx-auto p-4 md:p-12">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.3em] text-emerald-400 mb-2">Calendário Oficial</p>
@@ -215,19 +215,19 @@ export default function MatchesPage() {
                         </div>
 
                         <div className="flex items-center gap-4 flex-1 justify-center">
-                          <div className="flex items-center gap-3 w-40 justify-end">
-                            <span className="font-bold text-sm uppercase truncate">{match.team1}</span>
-                            <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                          <div className="flex items-center gap-2 w-16 md:w-40 justify-end">
+                            <span className="font-bold text-[10px] md:text-sm uppercase truncate">{match.team1}</span>
+                            <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
                               <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" />
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 md:gap-2">
                             <input
                               type="text"
                               value={guess.scoreA}
                               onChange={(e) => handleScoreChange(match.id, 'A', e.target.value)}
-                              className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-lg focus:border-emerald-500 outline-none"
+                              className="w-8 h-8 md:w-10 md:h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-sm md:text-lg focus:border-emerald-500 outline-none"
                               placeholder="0"
                             />
                             <span className="font-black text-slate-700 italic">X</span>
@@ -235,16 +235,16 @@ export default function MatchesPage() {
                               type="text"
                               value={guess.scoreB}
                               onChange={(e) => handleScoreChange(match.id, 'B', e.target.value)}
-                              className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-lg focus:border-emerald-500 outline-none"
+                              className="w-8 h-8 md:w-10 md:h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-sm md:text-lg focus:border-emerald-500 outline-none"
                               placeholder="0"
                             />
                           </div>
 
-                          <div className="flex items-center gap-3 w-40">
-                            <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                          <div className="flex items-center gap-2 w-16 md:w-40">
+                            <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
                               <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" />
                             </div>
-                            <span className="font-bold text-sm uppercase truncate">{match.team2}</span>
+                            <span className="font-bold text-[10px] md:text-sm uppercase truncate">{match.team2}</span>
                           </div>
                         </div>
 
@@ -321,16 +321,16 @@ export default function MatchesPage() {
                             value={guess.scoreA}
                             onChange={(e) => handleScoreChange(match.id, 'A', e.target.value)}
                             placeholder="0"
-                            className={`${viewMode === 'compact' ? 'w-12 h-14 text-2xl' : 'w-16 h-20 text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800`}
+                            className={`${viewMode === 'compact' ? 'w-10 h-12 text-xl sm:w-12 sm:h-14 sm:text-2xl' : 'w-12 h-16 text-2xl sm:w-16 sm:h-20 sm:text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800`}
                           />
-                          <span className={`font-black text-slate-700 italic ${viewMode === 'compact' ? 'text-xl' : 'text-2xl'}`}>X</span>
+                          <span className={`font-black text-slate-700 italic ${viewMode === 'compact' ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'}`}>X</span>
                           <input
                             type="text"
                             inputMode="numeric"
                             value={guess.scoreB}
                             onChange={(e) => handleScoreChange(match.id, 'B', e.target.value)}
                             placeholder="0"
-                            className={`${viewMode === 'compact' ? 'w-12 h-14 text-2xl' : 'w-16 h-20 text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800`}
+                            className={`${viewMode === 'compact' ? 'w-10 h-12 text-xl sm:w-12 sm:h-14 sm:text-2xl' : 'w-12 h-16 text-2xl sm:w-16 sm:h-20 sm:text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800`}
                           />
                         </div>
 

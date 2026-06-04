@@ -108,7 +108,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-[#0F172A] text-slate-100">
       <Navbar />
 
-      <main className="max-w-7xl mx-auto p-6 md:p-12">
+      <main className="max-w-7xl mx-auto p-4 md:p-12">
         {/* Admin Banner */}
         {isAdmin && (
           <motion.div 
@@ -178,18 +178,18 @@ export default function Dashboard() {
               <div className="flex flex-col gap-4">
                 {upcomingMatches.map((match) => (
                   <div key={match.id} className="bg-slate-800/40 border border-slate-700/50 p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6 hover:bg-slate-800/60 transition-all group">
-                    <div className="flex items-center gap-8 flex-1">
-                      <div className="flex items-center gap-4 min-w-[140px]">
-                        <div className="w-10 h-6 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner">
-                          <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[8px]">{match.team1.substring(0, 3).toUpperCase()}</span>} />
+                    <div className="flex items-center gap-2 sm:gap-4 flex-1">
+                      <div className="flex items-center gap-2 min-w-[80px] sm:min-w-[140px]">
+                        <div className="w-6 h-4 sm:w-10 sm:h-6 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner">
+                          <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[8px]">{match.team1.substring(0,3).toUpperCase()}</span>} />
                         </div>
-                        <span className="font-bold text-lg">{match.team1}</span>
+                        <span className="font-bold text-xs sm:text-lg truncate">{match.team1}</span>
                       </div>
-                      <div className="text-slate-600 font-black text-xl italic">VS</div>
-                      <div className="flex items-center gap-4 min-w-[140px] justify-end text-right">
-                        <span className="font-bold text-lg">{match.team2}</span>
-                        <div className="w-10 h-6 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner">
-                          <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[8px]">{match.team2.substring(0, 3).toUpperCase()}</span>} />
+                      <div className="text-slate-600 font-black text-sm sm:text-xl italic">VS</div>
+                      <div className="flex items-center gap-2 min-w-[80px] sm:min-w-[140px] justify-end text-right">
+                        <span className="font-bold text-xs sm:text-lg truncate">{match.team2}</span>
+                        <div className="w-6 h-4 sm:w-10 sm:h-6 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner">
+                          <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[8px]">{match.team2.substring(0,3).toUpperCase()}</span>} />
                         </div>
                       </div>
                     </div>

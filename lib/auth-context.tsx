@@ -58,14 +58,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setLoading(false);
           return;
         }
-        const { data } = await supabase.auth.getSession();
-        const session = data?.session;
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchProfile(session.user);
+        
+        // Use a small delay to allow storage lock management to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.warn('Initial session error (this can be normal during lock competition):', error.message);
+        }
+
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        
+        if (currentUser) {
+          await fetchProfile(currentUser);
         }
       } catch (err) {
-        console.error('Error getting initial session:', err);
+        console.error('Critical error in getInitialSession:', err);
       } finally {
         setLoading(false);
       }

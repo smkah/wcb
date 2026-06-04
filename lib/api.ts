@@ -139,12 +139,30 @@ export const adminApi = {
   },
 
   async deleteGroup(groupId: string) {
-    const { error } = await supabase
+    // 1. Explicitly remove members first to avoid FK constraint issues if RLS is weirdly handled in cascade
+    try {
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', groupId);
+      
+      if (memberError) {
+        console.warn("Could not delete group members proactively:", memberError.message);
+      }
+    } catch (e) {
+      console.warn("Proactive member deletion failed but continuing:", e);
+    }
+
+    // 2. Delete the group itself
+    const { error: groupError } = await supabase
       .from('groups')
       .delete()
       .eq('id', groupId);
     
-    if (error) throw error;
+    if (groupError) {
+      console.error("Error deleting group from Supabase:", groupError);
+      throw groupError;
+    }
   },
 
   // Matches
@@ -209,5 +227,25 @@ export const adminApi = {
       return true;
     }
     return false;
+  },
+
+  async simulateResults() {
+    const { data: matches, error } = await supabase
+      .from('matches')
+      .select('id, score1, score2');
+    
+    if (error) throw error;
+
+    for (const match of matches) {
+      if (match.score1 === null || match.score2 === null) {
+        await supabase
+          .from('matches')
+          .update({
+            score1: Math.floor(Math.random() * 4),
+            score2: Math.floor(Math.random() * 3)
+          })
+          .eq('id', match.id);
+      }
+    }
   }
 };

@@ -12,14 +12,22 @@ export const getSupabase = () => {
 
   if (!isSupabaseConfigured) {
     if (typeof window !== 'undefined') {
-      console.error('CRITICAL: Supabase credentials missing!');
-      console.info('To fix this "Failed to fetch" error, you must add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your environment variables or AI Studio Secrets.');
+      console.warn('Supabase credentials missing.');
     }
     // Return a dummy client to prevent crashes, but it will fail on calls
-    return createClient('https://placeholder-project.supabase.co', 'placeholder-key');
+    return createClient('https://placeholder-project.supabase.co', 'placeholder-key', {
+      auth: { persistSession: false }
+    });
   }
 
-  supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!);
+  supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: 'bolaodacopa-auth-token'
+    }
+  });
   return supabaseInstance;
 };
 

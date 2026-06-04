@@ -108,6 +108,20 @@ export default function AdminPage() {
     }
   };
 
+  const handleSimulateResults = async () => {
+    if (!confirm("Isso irá simular resultados para todas as partidas sem resultado definido. Continuar?")) return;
+    setIsSyncing(true);
+    try {
+      await adminApi.simulateResults();
+      await fetchAllData();
+      toast.success("Resultados simulados com sucesso!");
+    } catch (error: any) {
+      toast.error("Erro ao simular: " + error.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleDeleteUser = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este usuário?")) return;
     setIsActionLoading(id);
@@ -494,6 +508,16 @@ export default function AdminPage() {
                       </div>
                       <span className="font-bold text-xs uppercase tracking-widest text-left">Sincronizar Jogos</span>
                     </button>
+                    <button 
+                      onClick={handleSimulateResults}
+                      disabled={isSyncing}
+                      className="flex items-center gap-4 p-6 bg-slate-900 rounded-3xl border border-slate-800 hover:border-amber-500/50 transition-all group disabled:opacity-50"
+                    >
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-amber-400">
+                        {isSyncing ? <RefreshCw size={20} className="animate-spin" /> : <Trophy size={20} />}
+                      </div>
+                      <span className="font-bold text-xs uppercase tracking-widest text-left">Simular Resultados</span>
+                    </button>
                     {/* Other actions could go here */}
                   </div>
                 </section>
@@ -655,20 +679,26 @@ export default function AdminPage() {
                       <div className="flex items-center gap-2">
                         <button onClick={() => setEditingItem({ type: 'groups', data: group })} className="p-2 text-slate-500 hover:text-white"><Edit size={16} /></button>
                         <button 
-                          onClick={() => {
-                            if(confirm("Excluir este bolão permanentemente?")) {
-                              adminApi.deleteGroup(group.id)
-                                .then(() => {
-                                  toast.success("Bolão excluído com sucesso!");
-                                  fetchAllData();
-                                })
-                                .catch(err => {
-                                  console.error("Erro ao excluir bolão:", err);
-                                  toast.error("Erro ao excluir: " + (err.message || "Erro desconhecido"));
-                                });
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if(!confirm(`Deseja realmente excluir o bolão "${group.name}" permanentemente? Todos os membros serão desvinculados.`)) return;
+                            
+                            try {
+                              console.log("DEBUG: Iniciando exclusão do grupo:", group.id);
+                              await adminApi.deleteGroup(group.id);
+                              toast.success("Bolão excluído com sucesso!");
+                              // Delay refresh slightly to ensure DB consistency
+                              setTimeout(() => fetchAllData(), 500);
+                            } catch (err: any) {
+                              console.error("Erro crítico ao excluir bolão:", err);
+                              toast.error(`Falha ao excluir: ${err.message || 'Erro de conexão'}`);
+                              // Fallback refresh
+                              fetchAllData();
                             }
                           }}
-                          className="p-2 text-slate-500 hover:text-red-400"
+                          className="p-3 text-slate-500 hover:text-red-400 bg-slate-950/50 rounded-xl border border-slate-800 hover:border-red-500/50 transition-all"
+                          title="Excluir Bolão"
                         >
                           <Trash2 size={16} />
                         </button>
