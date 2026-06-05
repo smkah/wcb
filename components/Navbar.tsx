@@ -25,14 +25,14 @@ export default function Navbar() {
 
   const navItems = [
     { name: 'Dashboard', icon: TrendingUp, href: '/dashboard' },
-    { name: 'Partidas', icon: Calendar, href: '/matches' },
-    { name: 'Ranking', icon: Trophy, href: '/ranking' },
-    { name: 'Bolões', icon: Users, href: '/groups' },
-    { name: 'Perfil', icon: User, href: '/profile' },
+    { name: 'Partidas', icon: Calendar, href: '/dashboard/matches' },
+    { name: 'Ranking', icon: Trophy, href: '/dashboard/ranking' },
+    { name: 'Bolões', icon: Users, href: '/dashboard/groups' },
+    { name: 'Perfil', icon: User, href: '/dashboard/profile' },
   ];
 
   if (isAdmin) {
-    navItems.push({ name: 'Admin', icon: ShieldAlert, href: '/admin' });
+    navItems.push({ name: 'Admin', icon: ShieldAlert, href: '/dashboard/admin' });
   }
 
   const handleLogout = async () => {

@@ -25,6 +25,7 @@ export default function Dashboard() {
     { label: 'Meus Bolões', value: '0', icon: Users, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
   ]);
   const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
+  const [profileName, setProfileName] = useState<string>('');
   const [historyModal, setHistoryModal] = useState<{ isOpen: boolean; teamA: string; teamB: string }>({
     isOpen: false,
     teamA: '',
@@ -40,12 +41,16 @@ export default function Dashboard() {
         if (currentUser) {
           setUser(currentUser);
           
-          // Fetch profile for points
+          // Fetch profile for points and full_name
           const { data: profile } = await supabase
             .from('profiles')
-            .select('points, ranking_position')
+            .select('full_name, points, ranking_position')
             .eq('id', currentUser.id)
             .single();
+
+          if (profile) {
+            setProfileName(profile.full_name || currentUser.email?.split('@')[0] || '');
+          }
           
           // Fetch groups count
           const { count: groupsCount } = await supabase
@@ -120,7 +125,7 @@ export default function Dashboard() {
               <Star size={18} fill="currentColor" />
               <span className="text-xs font-black uppercase tracking-widest">Acesso de Administrador Ativo</span>
             </div>
-            <Link href="/admin" className="px-4 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-colors">
+            <Link href="/dashboard/admin" className="px-4 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-colors">
               Painel de Gestão
             </Link>
           </motion.div>
@@ -130,7 +135,7 @@ export default function Dashboard() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.3em] text-emerald-400 mb-2">Painel de Controle</p>
             <h1 className="text-5xl md:text-6xl font-black uppercase tracking-tighter">
-              OLÁ, <span className="gradient-text italic">{user?.email?.split('@')[0]}</span>
+              OLÁ, <span className="gradient-text italic">{profileName}</span>
             </h1>
           </div>
           <div className="flex items-center gap-4 border-l border-slate-700 pl-8 hidden md:flex">
@@ -170,7 +175,7 @@ export default function Dashboard() {
                 <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 flex items-center gap-3">
                   PRÓXIMAS PARTIDAS
                 </h2>
-                <Link href="/matches" className="text-xs font-bold text-emerald-400 flex items-center gap-2 hover:opacity-80 uppercase tracking-widest">
+                <Link href="/dashboard/matches" className="text-xs font-bold text-emerald-400 flex items-center gap-2 hover:opacity-80 uppercase tracking-widest">
                   Ver todos <ChevronRight size={14} />
                 </Link>
               </div>
@@ -207,7 +212,7 @@ export default function Dashboard() {
                         >
                           <History size={16} />
                         </button>
-                        <Link href="/matches" className="px-6 py-3 bg-emerald-500 text-slate-900 text-sm font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 active:scale-95 transition-all shadow-lg shadow-emerald-500/10">
+                        <Link href="/dashboard/matches" className="px-6 py-3 bg-emerald-500 text-slate-900 text-sm font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 active:scale-95 transition-all shadow-lg shadow-emerald-500/10">
                           PALPITAR
                         </Link>
                       </div>
@@ -224,7 +229,7 @@ export default function Dashboard() {
               <div className="relative z-10">
                 <h3 className="text-2xl font-black uppercase mb-4 leading-[1.1] text-slate-900">DESAFIE SEUS AMIGOS!</h3>
                 <p className="text-slate-900/70 text-sm font-bold mb-8 uppercase tracking-tight">Crie um bolão privado agora.</p>
-                <Link href="/groups" className="w-full py-4 bg-slate-900 text-white font-black uppercase tracking-widest text-sm rounded-2xl flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all">
+                <Link href="/dashboard/groups" className="w-full py-4 bg-slate-900 text-white font-black uppercase tracking-widest text-sm rounded-2xl flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all">
                   <Users size={18} /> CRIAR BOLÃO
                 </Link>
               </div>
@@ -242,7 +247,7 @@ export default function Dashboard() {
                   <Trophy className="mx-auto text-slate-800 mb-4" size={32} />
                   <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed">O ranking será atualizado após a abertura da copa</p>
                 </div>
-                <Link href="/ranking" className="mt-6 text-center text-[10px] font-bold text-slate-500 hover:text-emerald-400 uppercase tracking-[0.2em] transition-colors">
+                <Link href="/dashboard/ranking" className="mt-6 text-center text-[10px] font-bold text-slate-500 hover:text-emerald-400 uppercase tracking-[0.2em] transition-colors">
                   Ver Ranking Completo
                 </Link>
               </div>

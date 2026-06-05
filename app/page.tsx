@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { 
@@ -18,6 +18,46 @@ import {
 import Flag from 'react-world-flags';
 
 export default function LandingPage() {
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    isFinished: boolean;
+  }>({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    isFinished: false,
+  });
+
+  useEffect(() => {
+    const targetDate = new Date('2026-06-11T13:00:00-06:00');
+
+    const calculateTimeLeft = () => {
+      const now = new Date();
+      const difference = targetDate.getTime() - now.getTime();
+
+      if (difference <= 0) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isFinished: true });
+        return;
+      }
+
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((difference / 1000 / 60) % 60);
+      const seconds = Math.floor((difference / 1000) % 60);
+
+      setTimeLeft({ days, hours, minutes, seconds, isFinished: false });
+    };
+
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#050B1A] text-slate-100 selection:bg-emerald-500 selection:text-black">
       {/* Dynamic Background */}
@@ -71,12 +111,45 @@ export default function LandingPage() {
               Um único lugar para provar quem manda no futebol.
             </p>
 
+            {/* Countdown Timer */}
+            {!timeLeft.isFinished && (
+              <div className="mb-12 flex flex-col items-center">
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-emerald-500/70 mb-4">CONTAGEM REGRESSIVA PARA O INÍCIO</span>
+                <div className="flex gap-4 md:gap-6 justify-center">
+                  <div className="glass px-4 py-3 md:px-6 md:py-4 rounded-2xl min-w-[70px] md:min-w-[90px] border border-white/5 relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+                    <div className="text-2xl md:text-4xl font-black text-emerald-400 font-mono tracking-tighter">
+                      {String(timeLeft.days).padStart(2, '0')}
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Dias</div>
+                  </div>
+                  <div className="glass px-4 py-3 md:px-6 md:py-4 rounded-2xl min-w-[70px] md:min-w-[90px] border border-white/5 relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+                    <div className="text-2xl md:text-4xl font-black text-emerald-400 font-mono tracking-tighter">
+                      {String(timeLeft.hours).padStart(2, '0')}
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Horas</div>
+                  </div>
+                  <div className="glass px-4 py-3 md:px-6 md:py-4 rounded-2xl min-w-[70px] md:min-w-[90px] border border-white/5 relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+                    <div className="text-2xl md:text-4xl font-black text-emerald-400 font-mono tracking-tighter">
+                      {String(timeLeft.minutes).padStart(2, '0')}
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Minutos</div>
+                  </div>
+                  <div className="glass px-4 py-3 md:px-6 md:py-4 rounded-2xl min-w-[70px] md:min-w-[90px] border border-white/5 relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+                    <div className="text-2xl md:text-4xl font-black text-emerald-400 font-mono tracking-tighter">
+                      {String(timeLeft.seconds).padStart(2, '0')}
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mt-1">Segundos</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
               <Link id="hero-cta-main" href="/login?mode=signup" className="group flex items-center justify-center gap-4 px-10 py-5 bg-emerald-500 text-black font-black uppercase tracking-widest rounded-2xl shadow-2xl shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all">
                 CRIAR MEU GRUPO
                 <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
               </Link>
-              <Link id="hero-cta-secondary" href="/matches" className="flex items-center justify-center gap-4 px-10 py-5 bg-slate-900 border border-slate-800 font-black uppercase tracking-widest rounded-2xl hover:bg-slate-800 transition-all">
+              <Link id="hero-cta-secondary" href="/dashboard/matches" className="flex items-center justify-center gap-4 px-10 py-5 bg-slate-900 border border-slate-800 font-black uppercase tracking-widest rounded-2xl hover:bg-slate-800 transition-all">
                 TABELA COMPLETA
               </Link>
             </div>

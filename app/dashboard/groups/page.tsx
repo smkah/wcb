@@ -17,7 +17,18 @@ export default function GroupsPage() {
   // Logic states
   const [joinCode, setJoinCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
-  const [createData, setCreateData] = useState({ name: '', code: '' });
+  const [createData, setCreateData] = useState({
+    name: '',
+    code: '',
+    points_winner: 2,
+    points_exact: 5,
+    points_yellow_cards: 3,
+    points_red_card: 4,
+    points_group_both: 5,
+    points_group_first: 3,
+    points_group_second: 2,
+    points_group_third_qual: 1
+  });
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
@@ -176,14 +187,31 @@ export default function GroupsPage() {
     try {
       await adminApi.createGroup({
         name: createData.name,
-        points_winner: 3,
-        points_exact: 5,
-        points_first_half: 2
+        code: createData.code || undefined,
+        points_winner: createData.points_winner,
+        points_exact: createData.points_exact,
+        points_yellow_cards: createData.points_yellow_cards,
+        points_red_card: createData.points_red_card,
+        points_group_both: createData.points_group_both,
+        points_group_first: createData.points_group_first,
+        points_group_second: createData.points_group_second,
+        points_group_third_qual: createData.points_group_third_qual
       });
       toast.success("Bolão criado com sucesso!");
       await fetchGroups();
       setShowCreate(false);
-      setCreateData({ name: '', code: '' });
+      setCreateData({
+        name: '',
+        code: '',
+        points_winner: 2,
+        points_exact: 5,
+        points_yellow_cards: 3,
+        points_red_card: 4,
+        points_group_both: 5,
+        points_group_first: 3,
+        points_group_second: 2,
+        points_group_third_qual: 1
+      });
     } catch (err: any) {
       toast.error("Erro ao criar bolão: " + (err.message || "Verifique os dados"));
     } finally {
@@ -306,7 +334,7 @@ export default function GroupsPage() {
       {/* Modal for Create Group */}
       <AnimatePresence>
         {showCreate && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -318,7 +346,7 @@ export default function GroupsPage() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-lg glass p-12 rounded-[48px] overflow-hidden"
+              className="relative w-full max-w-lg glass p-6 sm:p-12 rounded-[24px] sm:rounded-[48px] overflow-hidden max-h-[90vh] overflow-y-auto"
             >
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-3xl" />
               <h2 className="text-4xl font-black uppercase tracking-tighter mb-4">NOVO BOLÃO</h2>
@@ -335,6 +363,90 @@ export default function GroupsPage() {
                     className="w-full px-8 py-5 bg-slate-950 rounded-[20px] border border-slate-800 outline-none focus:ring-4 focus:ring-emerald-500/20 uppercase font-bold tracking-tight text-white transition-all" 
                   />
                 </div>
+                
+                {/* Scoring configurations */}
+                <div className="space-y-4 p-5 bg-slate-950 rounded-3xl border border-slate-800">
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400">Pontuação das Regras</p>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Resultado Certo</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_winner} 
+                        onChange={e => setCreateData({ ...createData, points_winner: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Placar Exato</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_exact} 
+                        onChange={e => setCreateData({ ...createData, points_exact: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Mais Amarelos</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_yellow_cards} 
+                        onChange={e => setCreateData({ ...createData, points_yellow_cards: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Teve Vermelho?</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_red_card} 
+                        onChange={e => setCreateData({ ...createData, points_red_card: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Grupo: Ambos</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_group_both} 
+                        onChange={e => setCreateData({ ...createData, points_group_both: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Grupo: Apenas 1º</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_group_first} 
+                        onChange={e => setCreateData({ ...createData, points_group_first: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Grupo: Apenas 2º</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_group_second} 
+                        onChange={e => setCreateData({ ...createData, points_group_second: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black uppercase text-slate-500">Grupo: Melhor 3º</label>
+                      <input 
+                        type="number" 
+                        value={createData.points_group_third_qual} 
+                        onChange={e => setCreateData({ ...createData, points_group_third_qual: parseInt(e.target.value) || 0 })} 
+                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {/* ID de Acesso is automatically generated in API, but let's keep the UI look if they want to override */}
                 <div className="flex flex-col gap-3">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">ID de Acesso Automático (Opcional)</label>

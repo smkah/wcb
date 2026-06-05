@@ -10,13 +10,15 @@ import Link from 'next/link';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
 
-type TabType = 'overview' | 'users' | 'groups' | 'matches';
+type TabType = 'overview' | 'users' | 'groups' | 'matches' | 'standings';
 
 export default function AdminPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [groupResults, setGroupResults] = useState<any[]>([]);
+  const [savingStanding, setSavingStanding] = useState<string | null>(null);
   
   // Data state
   const [data, setData] = useState({
@@ -65,6 +67,11 @@ export default function AdminPage() {
     }
   };
 
+  const fetchGroupResults = async () => {
+    const { data: resData } = await supabase.from('group_results').select('*').order('group_letter', { ascending: true });
+    if (resData) setGroupResults(resData);
+  };
+
   useEffect(() => {
     const checkUser = async () => {
       if (!isSupabaseConfigured) return;
@@ -74,6 +81,7 @@ export default function AdminPage() {
       } else {
         setUser(user);
         await fetchAllData();
+        await fetchGroupResults();
       }
       setLoading(false);
     };
@@ -204,6 +212,58 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveGroupResults = async (groupLetter: string, firstPlace: string, secondPlace: string, thirdPlace: string, thirdPlaceQualified: boolean) => {
+    if (firstPlace === secondPlace || firstPlace === thirdPlace || secondPlace === thirdPlace) {
+      toast.error("Os times selecionados devem ser diferentes!");
+      return;
+    }
+    setSavingStanding(groupLetter);
+    try {
+      const { error } = await supabase
+        .from('group_results')
+        .upsert({
+          group_letter: groupLetter,
+          first_place: firstPlace || null,
+          second_place: secondPlace || null,
+          third_place: thirdPlace || null,
+          third_place_qualified: thirdPlaceQualified || false,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'group_letter' });
+      
+      if (error) throw error;
+      toast.success(`Resultado do Grupo ${groupLetter} salvo com sucesso!`);
+      await fetchGroupResults();
+    } catch (err: any) {
+      toast.error("Erro ao salvar resultado de grupo: " + (err.message || "Tente novamente"));
+    } finally {
+      setSavingStanding(null);
+    }
+  };
+
+  const handleForceRecalculatePoints = async () => {
+    setIsSyncing(true);
+    try {
+      const { error } = await supabase.rpc('recalculate_all_user_points');
+      if (error) throw error;
+      toast.success("Pontuações recalculadas com sucesso!");
+      await fetchAllData();
+    } catch (err: any) {
+      toast.error("Erro ao recalcular: " + (err.message || "Verifique se a função existe no Supabase"));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const getTeamsByGroup = (groupLetter: string) => {
+    const groupMatches = data.matches.filter(m => m.group === groupLetter);
+    const teams = new Set<string>();
+    groupMatches.forEach(m => {
+      if (m.team1) teams.add(m.team1);
+      if (m.team2) teams.add(m.team2);
+    });
+    return Array.from(teams);
+  };
+
   return (
     <div className="min-h-screen bg-[#0F172A] text-slate-100">
       <Navbar />
@@ -220,18 +280,18 @@ export default function AdminPage() {
             </h1>
           </div>
 
-          <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
-            {(['overview', 'users', 'groups', 'matches'] as TabType[]).map((tab) => (
+          <div className="flex flex-wrap sm:flex-nowrap bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 gap-1 sm:gap-0 w-full sm:w-auto">
+            {(['overview', 'users', 'groups', 'matches', 'standings'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                className={`px-3 sm:px-6 py-2 sm:py-3 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex-1 text-center ${
                   activeTab === tab 
                     ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20' 
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                {tab === 'overview' ? 'Geral' : tab === 'users' ? 'Usuários' : tab === 'groups' ? 'Bolões' : 'Jogos'}
+                {tab === 'overview' ? 'Geral' : tab === 'users' ? 'Usuários' : tab === 'groups' ? 'Bolões' : tab === 'matches' ? 'Jogos' : 'Grupos (Classificação)'}
               </button>
             ))}
           </div>
@@ -249,7 +309,7 @@ export default function AdminPage() {
               <motion.div
                 initial={{ scale: 0.9, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
-                className="glass w-full max-w-2xl p-10 rounded-[40px] max-h-[90vh] overflow-y-auto shadow-2xl shadow-emerald-500/10"
+                className="glass w-full max-w-2xl p-6 sm:p-10 rounded-[24px] sm:rounded-[40px] max-h-[90vh] overflow-y-auto shadow-2xl shadow-emerald-500/10"
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-3xl font-black uppercase tracking-tighter">
@@ -298,18 +358,41 @@ export default function AdminPage() {
                         />
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                          <div className="space-y-2">
                             <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Time Ganhador</label>
-                            <input type="number" value={editingItem.data.points_winner || 3} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_winner: parseInt(e.target.value) } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold" />
+                            <input type="number" value={editingItem.data.points_winner !== undefined && editingItem.data.points_winner !== null ? editingItem.data.points_winner : 2} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_winner: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
                          </div>
                          <div className="space-y-2">
                             <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Resultado Exato</label>
-                            <input type="number" value={editingItem.data.points_exact || 5} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_exact: parseInt(e.target.value) } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold" />
+                            <input type="number" value={editingItem.data.points_exact !== undefined && editingItem.data.points_exact !== null ? editingItem.data.points_exact : 5} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_exact: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
                          </div>
                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Gol/Tempo</label>
-                            <input type="number" value={editingItem.data.points_first_half || 2} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_first_half: parseInt(e.target.value) } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold" />
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Mais Amarelos</label>
+                            <input type="number" value={editingItem.data.points_yellow_cards !== undefined && editingItem.data.points_yellow_cards !== null ? editingItem.data.points_yellow_cards : 3} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_yellow_cards: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
+                         </div>
+                         <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Teve Vermelho?</label>
+                            <input type="number" value={editingItem.data.points_red_card !== undefined && editingItem.data.points_red_card !== null ? editingItem.data.points_red_card : 4} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_red_card: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
+                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                         <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Grupo: Ambos</label>
+                            <input type="number" value={editingItem.data.points_group_both !== undefined && editingItem.data.points_group_both !== null ? editingItem.data.points_group_both : 5} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_group_both: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
+                         </div>
+                         <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Grupo: Apenas 1º</label>
+                            <input type="number" value={editingItem.data.points_group_first !== undefined && editingItem.data.points_group_first !== null ? editingItem.data.points_group_first : 3} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_group_first: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
+                         </div>
+                         <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Grupo: Apenas 2º</label>
+                            <input type="number" value={editingItem.data.points_group_second !== undefined && editingItem.data.points_group_second !== null ? editingItem.data.points_group_second : 2} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_group_second: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
+                         </div>
+                         <div className="space-y-2">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Grupo: Melhor 3º</label>
+                            <input type="number" value={editingItem.data.points_group_third_qual !== undefined && editingItem.data.points_group_third_qual !== null ? editingItem.data.points_group_third_qual : 1} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points_group_third_qual: parseInt(e.target.value) || 0 } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white outline-none" />
                          </div>
                       </div>
                     </div>
@@ -320,48 +403,72 @@ export default function AdminPage() {
                         <button 
                           type="button"
                           onClick={() => {
-                            const newRules = { ...(editingItem.data.custom_rules || {}), "Nova Regra": 0 };
-                            setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: newRules } });
+                            const currentRules = Array.isArray(editingItem.data.custom_rules) 
+                              ? editingItem.data.custom_rules 
+                              : Object.entries(editingItem.data.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
+                            const updated = [...currentRules, { regra: '', resposta: '', pontos: 0 }];
+                            setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: updated } });
                           }}
                           className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
                         >+ ADICIONAR REGRA</button>
                       </div>
                       <div className="space-y-3">
-                        {Object.entries(editingItem.data.custom_rules || {}).map(([key, value], idx) => (
-                          <div key={idx} className="flex gap-2">
-                            <input 
-                              className="flex-1 bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs font-bold" 
-                              value={key}
-                              onChange={(e) => {
-                                const newRules = { ...editingItem.data.custom_rules };
-                                delete newRules[key];
-                                newRules[e.target.value] = value;
-                                setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: newRules } });
-                              }}
-                            />
-                            <input 
-                              type="number"
-                              className="w-20 bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs font-bold text-center" 
-                              value={value as number}
-                              onChange={(e) => {
-                                const newRules = { ...editingItem.data.custom_rules, [key]: parseInt(e.target.value) };
-                                setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: newRules } });
-                              }}
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => {
-                                const newRules = { ...editingItem.data.custom_rules };
-                                delete newRules[key];
-                                setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: newRules } });
-                              }}
-                              className="p-3 text-red-500 hover:bg-red-500/10 rounded-xl"
-                            >Excluir</button>
-                          </div>
-                        ))}
-                        {Object.keys(editingItem.data.custom_rules || {}).length === 0 && (
-                          <p className="text-[10px] text-slate-600 font-bold uppercase text-center py-2">Sem regras personalizadas</p>
-                        )}
+                        {(() => {
+                          const rulesList = Array.isArray(editingItem.data.custom_rules) 
+                            ? editingItem.data.custom_rules 
+                            : Object.entries(editingItem.data.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
+
+                          return (
+                            <>
+                              {rulesList.map((rule: any, idx: number) => (
+                                <div key={idx} className="flex flex-col sm:flex-row gap-2 border-b border-slate-800 pb-3">
+                                  <input 
+                                    placeholder="Regra (Ex: Primeiro gol)"
+                                    className="flex-2 bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white outline-none" 
+                                    value={rule.regra || ''}
+                                    onChange={(e) => {
+                                      const updated = [...rulesList];
+                                      updated[idx] = { ...updated[idx], regra: e.target.value };
+                                      setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: updated } });
+                                    }}
+                                  />
+                                  <input 
+                                    placeholder="Resposta oficial"
+                                    className="flex-1 bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs font-bold text-white outline-none" 
+                                    value={rule.resposta || ''}
+                                    onChange={(e) => {
+                                      const updated = [...rulesList];
+                                      updated[idx] = { ...updated[idx], resposta: e.target.value };
+                                      setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: updated } });
+                                    }}
+                                  />
+                                  <input 
+                                    type="number"
+                                    placeholder="Pts"
+                                    className="w-20 bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs font-bold text-center text-white outline-none" 
+                                    value={rule.pontos || 0}
+                                    onChange={(e) => {
+                                      const updated = [...rulesList];
+                                      updated[idx] = { ...updated[idx], pontos: parseInt(e.target.value) || 0 };
+                                      setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: updated } });
+                                    }}
+                                  />
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = rulesList.filter((_: any, i: number) => i !== idx);
+                                      setEditingItem({ ...editingItem, data: { ...editingItem.data, custom_rules: updated } });
+                                    }}
+                                    className="px-4 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl text-xs font-black uppercase tracking-wider transition-colors"
+                                  >Excluir</button>
+                                </div>
+                              ))}
+                              {rulesList.length === 0 && (
+                                <p className="text-[10px] text-slate-600 font-bold uppercase text-center py-2">Sem regras personalizadas</p>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                     
@@ -426,7 +533,7 @@ export default function AdminPage() {
 
                 {(editingItem.type === 'matches' || editingItem.type === 'add_match') && (
                   <form onSubmit={handleSaveMatch} className="space-y-6">
-                    <div className="grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Time 1</label>
                         <input value={editingItem.data.team1 || ''} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, team1: e.target.value } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" placeholder="Ex: Brasil" required />
@@ -436,7 +543,7 @@ export default function AdminPage() {
                         <input value={editingItem.data.team2 || ''} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, team2: e.target.value } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" placeholder="Ex: Argentina" required />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Data (YYYY-MM-DD)</label>
                         <input type="date" value={editingItem.data.date || ''} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, date: e.target.value } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" required />
@@ -446,6 +553,57 @@ export default function AdminPage() {
                         <input type="time" value={editingItem.data.time || ''} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, time: e.target.value } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" required />
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Placar Time 1</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.data.score1 !== null && editingItem.data.score1 !== undefined ? editingItem.data.score1 : ''} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, score1: e.target.value === '' ? null : parseInt(e.target.value) } })} 
+                          className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" 
+                          placeholder="Placar Real do Time 1" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Placar Time 2</label>
+                        <input 
+                          type="number" 
+                          value={editingItem.data.score2 !== null && editingItem.data.score2 !== undefined ? editingItem.data.score2 : ''} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, score2: e.target.value === '' ? null : parseInt(e.target.value) } })} 
+                          className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" 
+                          placeholder="Placar Real do Time 2" 
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Time com mais Amarelos</label>
+                        <select 
+                          value={editingItem.data.yellow_cards_winner || ''} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, yellow_cards_winner: e.target.value || null } })} 
+                          className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white focus:border-emerald-500 outline-none"
+                        >
+                          <option value="">Nenhum / Não Definido</option>
+                          <option value={editingItem.data.team1}>{editingItem.data.team1}</option>
+                          <option value="Empate">Empate</option>
+                          <option value={editingItem.data.team2}>{editingItem.data.team2}</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Teve Cartão Vermelho?</label>
+                        <select 
+                          value={editingItem.data.has_red_card === true ? 'true' : editingItem.data.has_red_card === false ? 'false' : ''} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, has_red_card: e.target.value === 'true' ? true : e.target.value === 'false' ? false : null } })} 
+                          className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl font-bold text-white focus:border-emerald-500 outline-none"
+                        >
+                          <option value="">Não Definido</option>
+                          <option value="true">Sim</option>
+                          <option value="false">Não</option>
+                        </select>
+                      </div>
+                    </div>
+
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Fase / Round</label>
                       <input value={editingItem.data.round || 'Matchday 1'} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, round: e.target.value } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" required />
@@ -602,13 +760,13 @@ export default function AdminPage() {
               animate={{ opacity: 1, x: 0 }}
               className="glass p-10 rounded-[40px]"
             >
-              <div className="flex items-center justify-between mb-10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
                 <h2 className="text-2xl font-black uppercase tracking-tighter">JOGOS DA COPA</h2>
-                <div className="flex gap-4">
-                  <button onClick={handleSyncMatches} className="flex items-center gap-2 px-6 py-3 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
+                <div className="flex flex-wrap gap-2 sm:gap-4">
+                  <button onClick={handleSyncMatches} className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
                     <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> Recarregar
                   </button>
-                  <button onClick={() => setEditingItem({ type: 'add_match', data: { team1: '', team2: '', date: '', time: '', round: 'Matchday 1' } })} className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all">
+                  <button onClick={() => setEditingItem({ type: 'add_match', data: { team1: '', team2: '', date: '', time: '', round: 'Matchday 1' } })} className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-emerald-500 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all">
                     <Plus size={14} /> Novo Jogo
                   </button>
                 </div>
@@ -656,13 +814,13 @@ export default function AdminPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="glass p-10 rounded-[40px]"
             >
-              <div className="flex items-center justify-between mb-10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
                 <h2 className="text-2xl font-black uppercase tracking-tighter">BOLÕES ATIVOS</h2>
-                <div className="flex gap-4">
-                   <button onClick={fetchAllData} className="flex items-center gap-2 px-6 py-3 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
+                <div className="flex flex-wrap gap-2 sm:gap-4">
+                   <button onClick={fetchAllData} className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
                     <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Recarregar
                    </button>
-                   <button onClick={() => setEditingItem({ type: 'add_group', data: { name: '', points_winner: 3, points_exact: 5, points_first_half: 2 } })} className="flex items-center gap-2 px-6 py-3 bg-cyan-500 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all">
+                   <button onClick={() => setEditingItem({ type: 'add_group', data: { name: '', points_winner: 2, points_exact: 5, points_first_half: 2 } })} className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-cyan-500 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all">
                       <Plus size={14} /> Novo Bolão
                    </button>
                 </div>
@@ -732,6 +890,126 @@ export default function AdminPage() {
                     <p className="text-xs font-black uppercase tracking-[0.2em]">Nenhum bolão criado ainda</p>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'standings' && (
+            <motion.div
+              key="standings"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="glass p-10 rounded-[40px]"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
+                <div>
+                  <h2 className="text-2xl font-black uppercase tracking-tighter">RESULTADO REAL DOS GRUPOS</h2>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
+                    Insira a classificação final oficial para cada grupo da Copa.
+                  </p>
+                </div>
+                <button
+                  onClick={handleForceRecalculatePoints}
+                  disabled={isSyncing}
+                  className="flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-xl transition-all shadow-lg shadow-emerald-500/10 disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> Recalcular Pontuações
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(groupLetter => {
+                  const groupTeams = getTeamsByGroup(groupLetter);
+                  const result = groupResults.find(r => r.group_letter === groupLetter) || { first_place: '', second_place: '', third_place: '', third_place_qualified: false };
+                  const isSaving = savingStanding === groupLetter;
+
+                  return (
+                    <div 
+                      key={groupLetter} 
+                      className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 flex flex-col justify-between"
+                    >
+                      <div>
+                        <h3 className="text-lg font-black text-white mb-4">GRUPO {groupLetter}</h3>
+                        <div className="space-y-3">
+                          {/* 1º Lugar */}
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">1º Colocado</label>
+                            <select
+                              value={result.first_place || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setGroupResults(prev => prev.map(r => r.group_letter === groupLetter ? { ...r, first_place: val } : r));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                            >
+                              <option value="">Não definido...</option>
+                              {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+
+                          {/* 2º Lugar */}
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">2º Colocado</label>
+                            <select
+                              value={result.second_place || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setGroupResults(prev => prev.map(r => r.group_letter === groupLetter ? { ...r, second_place: val } : r));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                            >
+                              <option value="">Não definido...</option>
+                              {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+
+                          {/* 3º Lugar */}
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">3º Colocado</label>
+                            <select
+                              value={result.third_place || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setGroupResults(prev => prev.map(r => r.group_letter === groupLetter ? { ...r, third_place: val } : r));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                            >
+                              <option value="">Não definido...</option>
+                              {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+
+                          {/* Qualified switch */}
+                          <div className="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-xl border border-slate-900 mt-2">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">3º classificado?</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const curr = result.third_place_qualified || false;
+                                setGroupResults(prev => prev.map(r => r.group_letter === groupLetter ? { ...r, third_place_qualified: !curr } : r));
+                              }}
+                              className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                                result.third_place_qualified
+                                  ? 'bg-amber-500 text-slate-900 shadow-md shadow-amber-500/10'
+                                  : 'bg-slate-900 text-slate-600 hover:text-slate-400'
+                              }`}
+                            >
+                              {result.third_place_qualified ? 'Sim (Qualificou)' : 'Não'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleSaveGroupResults(groupLetter, result.first_place, result.second_place, result.third_place, result.third_place_qualified)}
+                        disabled={isSaving}
+                        className="w-full mt-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isSaving ? <RefreshCw size={12} className="animate-spin" /> : 'Salvar Grupo ' + groupLetter}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           )}

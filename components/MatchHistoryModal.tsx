@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, History, Trophy, TrendingUp, AlertCircle } from 'lucide-react';
+import { X, History, Trophy, TrendingUp, AlertCircle, ArrowUpDown } from 'lucide-react';
 import Flag from 'react-world-flags';
 import { getFlagCode } from '@/lib/countries';
 
@@ -22,6 +22,8 @@ interface MatchHistoryModalProps {
 }
 
 export default function MatchHistoryModal({ isOpen, onClose, teamA, teamB }: MatchHistoryModalProps) {
+  const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('asc');
+
   // Mock data generator for confrontos - deterministic based on team names
   const generateH2H = React.useMemo(() => {
     if (!teamA || !teamB) return [];
@@ -61,11 +63,19 @@ export default function MatchHistoryModal({ isOpen, onClose, teamA, teamB }: Mat
         score2: deterministicScore(75, 4),
         winner: null
       }
-    ].map(m => ({
-      ...m,
-      winner: m.score1 > m.score2 ? teamA : m.score2 > m.score1 ? teamB : 'Empate'
-    }));
-  }, [teamA, teamB]);
+    ]
+      .map(m => ({
+        ...m,
+        winner: m.score1 > m.score2 ? teamA : m.score2 > m.score1 ? teamB : 'Empate'
+      }))
+      .sort((a, b) => {
+        const dateA = a.date.split('/').reverse().join('-');
+        const dateB = b.date.split('/').reverse().join('-');
+        return sortOrder === 'asc' 
+          ? dateA.localeCompare(dateB) 
+          : dateB.localeCompare(dateA);
+      });
+  }, [teamA, teamB, sortOrder]);
 
   const history = generateH2H;
   const stats = history.reduce((acc, curr) => {
@@ -91,10 +101,10 @@ export default function MatchHistoryModal({ isOpen, onClose, teamA, teamB }: Mat
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="relative w-full max-w-lg bg-slate-900 border border-slate-700/50 rounded-[32px] shadow-2xl overflow-hidden"
+            className="relative w-full max-w-lg bg-slate-900 border border-slate-700/50 rounded-[24px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
           >
             {/* Header */}
-            <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+            <div className="p-4 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-500/10 rounded-xl">
                   <History className="text-emerald-500" size={20} />
@@ -112,35 +122,44 @@ export default function MatchHistoryModal({ isOpen, onClose, teamA, teamB }: Mat
               </button>
             </div>
 
-            <div className="p-6 space-y-8">
+            <div className="p-4 sm:p-6 space-y-6 sm:space-y-8 overflow-y-auto flex-1">
               {/* Teams Overview */}
-              <div className="flex items-center justify-between gap-4 px-4 py-6 bg-slate-950/50 rounded-3xl border border-slate-800">
-                <div className="flex flex-col items-center gap-3 flex-1">
-                  <div className="w-12 h-8 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden shadow-lg">
+              <div className="flex items-center justify-between gap-2 sm:gap-4 px-2 sm:px-4 py-4 sm:py-6 bg-slate-950/50 rounded-3xl border border-slate-800">
+                <div className="flex flex-col items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                  <div className="w-10 h-7 sm:w-12 sm:h-8 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden shadow-lg flex-shrink-0">
                     <Flag code={getFlagCode(teamA)} className="w-full h-full object-cover" />
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 text-center">{teamA}</span>
-                  <div className="px-3 py-1 bg-emerald-500 text-slate-900 text-xs font-black rounded-lg">{stats.winsA}V</div>
+                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-300 text-center truncate w-full">{teamA}</span>
+                  <div className="px-2 sm:px-3 py-0.5 sm:py-1 bg-emerald-500 text-slate-900 text-[10px] sm:text-xs font-black rounded-lg">{stats.winsA}V</div>
                 </div>
 
-                <div className="flex flex-col items-center gap-1">
-                  <div className="px-3 py-1 bg-slate-800 text-slate-400 text-[10px] font-black rounded-lg uppercase tracking-widest">EMP: {stats.draws}</div>
-                  <div className="h-px w-8 bg-slate-800" />
-                  <TrendingUp size={16} className="text-slate-700" />
+                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                  <div className="px-2 py-0.5 bg-slate-800 text-slate-400 text-[8px] sm:text-[10px] font-black rounded-lg uppercase tracking-widest">EMP: {stats.draws}</div>
+                  <div className="h-px w-6 sm:w-8 bg-slate-800" />
+                  <TrendingUp size={14} className="text-slate-700" />
                 </div>
 
-                <div className="flex flex-col items-center gap-3 flex-1">
-                  <div className="w-12 h-8 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden shadow-lg">
+                <div className="flex flex-col items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                  <div className="w-10 h-7 sm:w-12 sm:h-8 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden shadow-lg flex-shrink-0">
                     <Flag code={getFlagCode(teamB)} className="w-full h-full object-cover" />
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 text-center">{teamB}</span>
-                  <div className="px-3 py-1 bg-emerald-500 text-slate-900 text-xs font-black rounded-lg">{stats.winsB}V</div>
+                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-300 text-center truncate w-full">{teamB}</span>
+                  <div className="px-2 sm:px-3 py-0.5 sm:py-1 bg-emerald-500 text-slate-900 text-[10px] sm:text-xs font-black rounded-lg">{stats.winsB}V</div>
                 </div>
               </div>
 
               {/* History List */}
               <div className="space-y-3">
-                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-2 mb-4">Cronologia Recente</h4>
+                <div className="flex items-center justify-between px-2 mb-4">
+                  <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Cronologia</h4>
+                  <button
+                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700/80 active:scale-95 text-[9px] font-black text-slate-300 uppercase tracking-wider rounded-xl border border-slate-700/50 transition-all cursor-pointer"
+                  >
+                    <ArrowUpDown size={10} className="text-slate-400" />
+                    {sortOrder === 'asc' ? 'Mais Antigo' : 'Mais Novo'}
+                  </button>
+                </div>
                 {history.map((match, idx) => (
                   <div key={idx} className="p-4 bg-slate-800/30 rounded-2xl border border-white/5 flex items-center justify-between group hover:bg-slate-800/50 transition-colors">
                     <div className="flex flex-col gap-1">
