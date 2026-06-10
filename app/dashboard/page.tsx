@@ -13,6 +13,7 @@ import MatchHistoryModal from '@/components/MatchHistoryModal';
 
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
+import { formatMatchDate, formatMatchTime } from '@/lib/utils';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function Dashboard() {
   ]);
   const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
   const [profileName, setProfileName] = useState<string>('');
+  const [pendingReminderMatches, setPendingReminderMatches] = useState<any[]>([]);
   const [historyModal, setHistoryModal] = useState<{ isOpen: boolean; teamA: string; teamB: string }>({
     isOpen: false,
     teamA: '',
@@ -72,11 +74,33 @@ export default function Dashboard() {
         const { data: matches } = await supabase
           .from('matches')
           .select('*')
-          .order('date', { ascending: true })
-          .limit(3);
+          .order('date', { ascending: true });
         
         if (matches && matches.length > 0) {
-          setUpcomingMatches(matches);
+          setUpcomingMatches(matches.slice(0, 3));
+          
+          // Filter matches starting within the next 2 hours that the user hasn't predicted yet
+          if (currentUser) {
+            const { data: userGuesses } = await supabase
+              .from('guesses')
+              .select('match_id')
+              .eq('profile_id', currentUser.id);
+
+            const guessedMatchIds = new Set((userGuesses || []).map((g: any) => g.match_id));
+            const now = new Date();
+            const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+            
+            const pending = matches.filter((match: any) => {
+              if (guessedMatchIds.has(match.id)) return false;
+              
+              const timePart = match.time ? match.time.split(' ')[0] : '00:00';
+              const matchDateTime = new Date(`${match.date}T${timePart}`);
+              
+              return matchDateTime > now && matchDateTime <= twoHoursFromNow;
+            });
+            
+            setPendingReminderMatches(pending);
+          }
         } else {
           setUpcomingMatches(WORLD_CUP_DATA.matches.slice(0, 3));
         }
@@ -127,6 +151,33 @@ export default function Dashboard() {
             </div>
             <Link href="/dashboard/admin" className="px-4 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-colors">
               Painel de Gestão
+            </Link>
+          </motion.div>
+        )}
+
+        {/* Pending Predictions Reminder Banner */}
+        {pendingReminderMatches.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-[32px] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-amber-500/5 relative overflow-hidden"
+          >
+            <div className="flex items-center gap-4 text-amber-500">
+              <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} className="animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-tight text-white">Palpites Pendentes!</h4>
+                <p className="text-slate-400 text-xs font-medium mt-0.5 leading-relaxed">
+                  Você tem {pendingReminderMatches.length} {pendingReminderMatches.length === 1 ? 'partida que começa' : 'partidas que começam'} em menos de 2 horas e ainda não palpitou:{' '}
+                  <span className="text-amber-400 font-bold">
+                    {pendingReminderMatches.map(m => `${m.team1} vs ${m.team2}`).join(', ')}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <Link href="/dashboard/matches" className="px-6 py-3 bg-amber-500 text-slate-900 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-400 active:scale-95 transition-all shadow-lg shadow-amber-500/10 shrink-0">
+              PALPITAR AGORA
             </Link>
           </motion.div>
         )}
@@ -201,7 +252,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-6">
                       <div className="text-right hidden sm:block">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                          {new Date(match.date).toLocaleDateString('pt-BR', { month: 'short', day: '2-digit' }).toUpperCase()} — {match.time.split(' ')[0]}
+                          {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">

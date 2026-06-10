@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE,
     full_name TEXT,
     points INTEGER DEFAULT 0,
     ranking_position INTEGER,
@@ -137,8 +138,14 @@ CREATE POLICY "Admin pode gerenciar palpites" ON public.guesses FOR ALL USING (i
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, full_name, points)
-  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', 0)
+  INSERT INTO public.profiles (id, email, full_name, username, points)
+  VALUES (
+    new.id, 
+    new.email, 
+    COALESCE(new.raw_user_meta_data->>'full_name', SPLIT_PART(new.email, '@', 1)), 
+    COALESCE(new.raw_user_meta_data->>'username', LOWER(SPLIT_PART(new.email, '@', 1))), 
+    0
+  )
   ON CONFLICT (id) DO NOTHING;
   RETURN new;
 END;

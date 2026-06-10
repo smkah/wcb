@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import { formatMatchDate, formatMatchTime } from '@/lib/utils';
 
 type TabType = 'overview' | 'users' | 'groups' | 'matches' | 'standings';
 
@@ -160,6 +161,17 @@ export default function AdminPage() {
       if (editingItem.type === 'users') {
         await adminApi.updateUser(editingItem.data.id, editingItem.data);
         toast.success("Perfil atualizado!");
+      } else if (editingItem.type === 'add_user') {
+        if (!editingItem.data.email || !editingItem.data.password || !editingItem.data.username || !editingItem.data.full_name) {
+          throw new Error("Preencha todos os campos obrigatórios.");
+        }
+        await adminApi.createUser({
+          email: editingItem.data.email,
+          password: editingItem.data.password,
+          username: editingItem.data.username,
+          full_name: editingItem.data.full_name,
+        });
+        toast.success("Usuário criado com sucesso!");
       }
       await fetchAllData();
       setEditingItem(null);
@@ -318,28 +330,69 @@ export default function AdminPage() {
                   <button onClick={() => setEditingItem(null)} className="text-slate-500 hover:text-white font-black text-xs uppercase tracking-widest">Fechar</button>
                 </div>
 
-                {editingItem.type === 'users' && (
+                {(editingItem.type === 'users' || editingItem.type === 'add_user') && (
                   <form onSubmit={handleSaveUser} className="space-y-6">
+                    {editingItem.type === 'add_user' && (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">E-mail</label>
+                          <input 
+                            type="email" 
+                            required
+                            value={editingItem.data.email || ''} 
+                            onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, email: e.target.value } })}
+                            className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl outline-none focus:border-emerald-500 transition-all font-bold"
+                            placeholder="seu@email.com"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nome de Usuário</label>
+                          <input 
+                            type="text" 
+                            required
+                            value={editingItem.data.username || ''} 
+                            onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, username: e.target.value.replace(/[^a-zA-Z0-9_.-]/g, '') } })}
+                            className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl outline-none focus:border-emerald-500 transition-all font-bold"
+                            placeholder="usuario"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Senha</label>
+                          <input 
+                            type="password" 
+                            required
+                            value={editingItem.data.password || ''} 
+                            onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, password: e.target.value } })}
+                            className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl outline-none focus:border-emerald-500 transition-all font-bold"
+                            placeholder="••••••••"
+                          />
+                        </div>
+                      </>
+                    )}
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nome Completo</label>
                       <input 
                         type="text" 
+                        required={editingItem.type === 'add_user'}
                         value={editingItem.data.full_name || ''} 
                         onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, full_name: e.target.value } })}
                         className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl outline-none focus:border-emerald-500 transition-all font-bold"
+                        placeholder="Nome do usuário"
                       />
                     </div>
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Pontos Digitais</label>
-                       <input 
-                        type="number" 
-                        value={editingItem.data.points || 0} 
-                        onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points: parseInt(e.target.value) } })}
-                        className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl outline-none focus:border-emerald-500 transition-all font-bold"
-                      />
-                    </div>
+                    {editingItem.type === 'users' && (
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Pontos Digitais</label>
+                         <input 
+                          type="number" 
+                          value={editingItem.data.points || 0} 
+                          onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, points: parseInt(e.target.value) } })}
+                          className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl outline-none focus:border-emerald-500 transition-all font-bold"
+                        />
+                      </div>
+                    )}
                     <button type="submit" disabled={modalLoading} className="w-full py-5 bg-emerald-500 text-slate-900 font-black uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all">
-                      {modalLoading ? <RefreshCw size={20} className="animate-spin mx-auto" /> : 'Atualizar Perfil'}
+                      {modalLoading ? <RefreshCw size={20} className="animate-spin mx-auto" /> : editingItem.type === 'add_user' ? 'Criar Usuário' : 'Atualizar Perfil'}
                     </button>
                   </form>
                 )}
@@ -705,11 +758,19 @@ export default function AdminPage() {
               animate={{ opacity: 1, x: 0 }}
               className="glass p-10 rounded-[40px]"
             >
-              <div className="flex items-center justify-between mb-10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
                 <h2 className="text-2xl font-black uppercase tracking-tighter">BASE DE USUÁRIOS</h2>
-                <div className="relative">
-                   <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                   <input type="text" placeholder="BUSCAR USUÁRIO..." className="pl-12 pr-6 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold focus:border-emerald-500 outline-none transition-all uppercase tracking-widest" />
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="relative">
+                     <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                     <input type="text" placeholder="BUSCAR USUÁRIO..." className="pl-12 pr-6 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold focus:border-emerald-500 outline-none transition-all uppercase tracking-widest" />
+                  </div>
+                  <button 
+                    onClick={() => setEditingItem({ type: 'add_user', data: { email: '', password: '', username: '', full_name: '' } })} 
+                    className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/10"
+                  >
+                    <Plus size={14} /> Novo Usuário
+                  </button>
                 </div>
               </div>
 
@@ -777,8 +838,8 @@ export default function AdminPage() {
                   <div key={m.id} className="flex flex-col md:flex-row items-center justify-between p-6 bg-slate-900/50 rounded-2xl border border-slate-800 group hover:border-amber-500/30 transition-all gap-6">
                     <div className="flex items-center gap-6 flex-1">
                       <div className="text-center min-w-[60px]">
-                        <p className="text-xs font-black text-emerald-400">{new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).toUpperCase()}</p>
-                        <p className="text-[10px] font-bold text-slate-500">{m.time.split(' ')[0]}</p>
+                        <p className="text-xs font-black text-emerald-400">{formatMatchDate(m.date)}</p>
+                        <p className="text-[10px] font-bold text-slate-500">{formatMatchTime(m.time)}</p>
                       </div>
                       <div className="flex items-center gap-4 flex-1">
                         <span className="font-black text-sm uppercase flex-1 text-right truncate">{m.team1}</span>

@@ -3,6 +3,29 @@ import { WORLD_CUP_DATA } from './data';
 
 export const adminApi = {
   // Profiles/Users
+  async createUser(userData: any) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const { createClient } = await import('@supabase/supabase-js');
+    const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false }
+    });
+
+    const { data, error } = await tempClient.auth.signUp({
+      email: userData.email,
+      password: userData.password,
+      options: {
+        data: {
+          username: userData.username.trim().toLowerCase(),
+          full_name: userData.full_name.trim(),
+        }
+      }
+    });
+
+    if (error) throw error;
+    return data.user;
+  },
+
   async getUsers() {
     const { data, error } = await supabase
       .from('profiles')
@@ -55,6 +78,7 @@ export const adminApi = {
         const { error: insertError } = await supabase.from('profiles').insert({
           id: user.id,
           email: user.email,
+          username: user.user_metadata?.username || user.email?.split('@')[0].toLowerCase(),
           full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
           points: 0
         });

@@ -15,6 +15,8 @@ export default function RankingPage() {
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [selectedUserBadges, setSelectedUserBadges] = useState<string[]>([]);
 
+  const hasPoints = ranking.some(u => (u.points || 0) > 0);
+
   useEffect(() => {
     const fetchRanking = async () => {
       setLoading(true);
@@ -26,7 +28,17 @@ export default function RankingPage() {
           .limit(100);
         
         if (error) throw error;
-        setRanking(data || []);
+        
+        const sortedData = data || [];
+        const hasPointsAny = sortedData.some(u => (u.points || 0) > 0);
+        if (!hasPointsAny) {
+          sortedData.sort((a, b) => {
+            const nameA = (a.full_name || a.email || '').toLowerCase();
+            const nameB = (b.full_name || b.email || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+        }
+        setRanking(sortedData);
       } catch (err) {
         console.error("Error fetching ranking:", err);
       } finally {
@@ -90,48 +102,63 @@ export default function RankingPage() {
           </div>
         ) : ranking.length > 0 ? (
           <div className="grid gap-4">
+             {!hasPoints && (
+               <div className="glass p-8 rounded-[32px] border border-amber-500/20 bg-amber-500/5 text-center mb-6">
+                 <Trophy className="mx-auto text-amber-500 mb-4 animate-pulse" size={40} />
+                 <h3 className="text-lg font-black uppercase tracking-tight text-white mb-2">Ninguém pontuou ainda!</h3>
+                 <p className="text-slate-400 text-xs font-medium max-w-md mx-auto leading-loose">
+                   Os palpites começarão a acumular pontos assim que as primeiras partidas oficiais da Copa forem concluídas e os resultados reais forem atualizados pelo administrador.
+                 </p>
+               </div>
+             )}
+
              {/* Podium for top 3 */}
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
-                {ranking.slice(0, 3).map((user, idx) => {
-                  const positions = [
-                    { label: '2º', height: 'h-48', color: 'bg-slate-400/10 text-slate-400 border-slate-400/30', order: 'order-2 md:order-1' },
-                    { label: '1º', height: 'h-64', color: 'bg-amber-400/10 text-amber-500 border-amber-400/30', order: 'order-1 md:order-2 shadow-2xl shadow-amber-400/5 my-6 md:my-0 scale-100 md:scale-110' },
-                    { label: '3º', height: 'h-40', color: 'bg-orange-800/10 text-orange-800 border-orange-800/30', order: 'order-3' }
-                  ];
-                  const pos = idx === 0 ? positions[1] : idx === 1 ? positions[0] : positions[2];
-                  
-                  return (
-                    <motion.div 
-                      key={user.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.2 }}
-                      onClick={() => setSelectedUser(user)}
-                      className={`${pos.order} relative flex flex-col items-center cursor-pointer hover:scale-[1.03] transition-all`}
-                    >
-                      <div className="mb-6 relative">
-                        <div className={`w-24 h-24 rounded-full border-4 ${pos.color.split(' ')[2]} flex items-center justify-center font-black text-4xl overflow-hidden shadow-2xl`}>
-                          {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
+             {hasPoints && (
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
+                  {ranking.slice(0, 3).map((user, idx) => {
+                    const positions = [
+                      { label: '2º', height: 'h-48', color: 'bg-slate-400/10 text-slate-400 border-slate-400/30', order: 'order-2 md:order-1' },
+                      { label: '1º', height: 'h-64', color: 'bg-amber-400/10 text-amber-500 border-amber-400/30', order: 'order-1 md:order-2 shadow-2xl shadow-amber-400/5 my-6 md:my-0 scale-100 md:scale-110' },
+                      { label: '3º', height: 'h-40', color: 'bg-orange-800/10 text-orange-800 border-orange-800/30', order: 'order-3' }
+                    ];
+                    const pos = idx === 0 ? positions[1] : idx === 1 ? positions[0] : positions[2];
+                    
+                    return (
+                      <motion.div 
+                        key={user.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.2 }}
+                        onClick={() => setSelectedUser(user)}
+                        className={`${pos.order} relative flex flex-col items-center cursor-pointer hover:scale-[1.03] transition-all`}
+                      >
+                        <div className="mb-6 relative">
+                          <div className={`w-24 h-24 rounded-full border-4 ${pos.color.split(' ')[2]} flex items-center justify-center font-black text-4xl overflow-hidden shadow-2xl`}>
+                            {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
+                          </div>
+                          <div className={`absolute -top-4 -right-4 w-12 h-12 ${pos.color} flex items-center justify-center rounded-2xl font-black border-2 border-[#0F172A]`}>
+                             {pos.label}
+                          </div>
                         </div>
-                        <div className={`absolute -top-4 -right-4 w-12 h-12 ${pos.color} flex items-center justify-center rounded-2xl font-black border-2 border-[#0F172A]`}>
-                           {pos.label}
+                        <div className={`w-full ${pos.height} ${pos.color} border-2 border-b-0 rounded-t-[40px] p-6 flex flex-col items-center justify-center text-center gap-2`}>
+                          <h3 className="font-black uppercase tracking-tight text-lg line-clamp-1 truncate max-w-full flex items-center gap-1.5 justify-center">
+                            <span>👑</span> {user.full_name || user.email?.split('@')[0]}
+                          </h3>
+                          {user.username && (
+                            <p className="text-[10px] font-bold text-emerald-400">@{user.username}</p>
+                          )}
+                          <p className="font-black text-3xl">{user.points || 0}</p>
+                          <p className="text-[10px] uppercase font-bold tracking-widest opacity-60">PONTOS ACUMULADOS</p>
                         </div>
-                      </div>
-                      <div className={`w-full ${pos.height} ${pos.color} border-2 border-b-0 rounded-t-[40px] p-6 flex flex-col items-center justify-center text-center gap-2`}>
-                        <h3 className="font-black uppercase tracking-tight text-lg line-clamp-1 truncate max-w-full flex items-center gap-1.5 justify-center">
-                          <span>👑</span> {user.full_name || user.email?.split('@')[0]}
-                        </h3>
-                        <p className="font-black text-3xl">{user.points || 0}</p>
-                        <p className="text-[10px] uppercase font-bold tracking-widest opacity-60">PONTOS ACUMULADOS</p>
-                      </div>
-                    </motion.div>
-                  )
-                })}
-             </div>
+                      </motion.div>
+                    )
+                  })}
+               </div>
+             )}
 
              {/* The rest of the list */}
              <div className="space-y-3 mt-12">
-               {ranking.slice(3).map((user, idx) => (
+               {(hasPoints ? ranking.slice(3) : ranking).map((user, idx) => (
                  <motion.div 
                    key={user.id}
                    initial={{ opacity: 0, x: -20 }}
@@ -140,14 +167,19 @@ export default function RankingPage() {
                    className="glass p-6 rounded-2xl flex items-center justify-between group hover:border-emerald-500/30 cursor-pointer hover:scale-[1.01] hover:bg-slate-900/40 transition-all"
                  >
                    <div className="flex items-center gap-6">
-                     <span className="w-8 font-black text-slate-700 italic text-xl">#{(idx + 4)}</span>
+                     <span className="w-8 font-black text-slate-700 italic text-xl">#{hasPoints ? idx + 4 : idx + 1}</span>
                      <div className="w-12 h-12 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center font-black text-slate-400 group-hover:text-emerald-400 transition-colors uppercase">
                        {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
                      </div>
-                     <div>
-                       <p className="font-bold text-white group-hover:text-emerald-400 transition-colors">{user.full_name || user.email?.split('@')[0]}</p>
-                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user.email?.replace(/(.{3}).*(@.*)/, '$1***$2')}</p>
-                     </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-white group-hover:text-emerald-400 transition-colors">{user.full_name || user.email?.split('@')[0]}</p>
+                          {user.username && (
+                            <span className="text-[10px] font-bold text-emerald-400">@{user.username}</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user.email?.replace(/(.{3}).*(@.*)/, '$1***$2')}</p>
+                      </div>
                    </div>
                    <div className="flex flex-col items-end">
                       <p className="text-2xl font-black text-white">{user.points || 0}</p>
@@ -203,7 +235,10 @@ export default function RankingPage() {
                 </div>
                 <div className="text-center sm:text-left">
                   <h3 className="text-2xl font-black uppercase tracking-tight text-white">{selectedUser.full_name || selectedUser.email?.split('@')[0]}</h3>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Pontos Acumulados: <span className="text-emerald-400 font-black">{selectedUser.points || 0}</span></p>
+                  {selectedUser.username && (
+                    <p className="text-xs font-bold text-emerald-400 mt-0.5">@{selectedUser.username}</p>
+                  )}
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Pontos Acumulados: <span className="text-emerald-400 font-black">{selectedUser.points || 0}</span></p>
                 </div>
               </div>
 

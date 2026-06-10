@@ -20,6 +20,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState({
     full_name: '',
     email: '',
+    username: '',
     avatar_url: '',
   });
   const [userGuesses, setUserGuesses] = useState<any[]>([]);
@@ -49,6 +50,7 @@ export default function ProfilePage() {
           setProfile({
             full_name: data.full_name || '',
             email: data.email || '',
+            username: data.username || '',
             avatar_url: data.avatar_url || '',
           });
           setRankingPosition(data.ranking_position || undefined);
@@ -194,7 +196,10 @@ export default function ProfilePage() {
                 </label>
               </div>
               <h3 className="text-lg font-black uppercase tracking-tight truncate">{profile.full_name || 'Usuário'}</h3>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Membro desde 2026</p>
+              {profile.username && (
+                <p className="text-xs font-bold text-emerald-400 mt-0.5">@{profile.username}</p>
+              )}
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Membro desde 2026</p>
             </div>
           </div>
 

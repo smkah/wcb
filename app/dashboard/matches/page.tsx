@@ -13,6 +13,7 @@ import MatchStatsModal from '@/components/MatchStatsModal';
 
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
+import { formatMatchDate, formatMatchTime } from '@/lib/utils';
 
 export default function MatchesPage() {
   const [guesses, setGuesses] = useState<Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string> }>>({});
@@ -438,7 +439,7 @@ export default function MatchesPage() {
                       >
                         <div className="flex items-center gap-4 min-w-[120px]">
                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/50 px-3 py-1 rounded-md">
-                             {new Date(match.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).toUpperCase()} — {match.time.split(' ')[0]}
+                             {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
                            </span>
                         </div>
 
@@ -491,9 +492,9 @@ export default function MatchesPage() {
                                     { value: match.team1, label: match.team1.substring(0,3).toUpperCase() },
                                     { value: 'Empate', label: 'EMP' },
                                     { value: match.team2, label: match.team2.substring(0,3).toUpperCase() }
-                                  ].map(opt => (
+                                  ].map((opt, optIdx) => (
                                     <button
-                                      key={opt.value}
+                                      key={`${opt.value}-${optIdx}`}
                                       type="button"
                                       disabled={isStarted}
                                       onClick={() => {
@@ -648,7 +649,7 @@ export default function MatchesPage() {
                           )}
                         </div>
                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                          {new Date(match.date).toLocaleString('pt-BR', { day: '2-digit', month: 'short' }).toUpperCase()} — {match.time.split(' ')[0]}
+                          {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
                         </span>
                       </div>
 
@@ -702,9 +703,9 @@ export default function MatchesPage() {
                                 { value: match.team1, label: match.team1 },
                                 { value: 'Empate', label: 'Empate' },
                                 { value: match.team2, label: match.team2 }
-                              ].map(opt => (
+                              ].map((opt, optIdx) => (
                                 <button
-                                  key={opt.value}
+                                  key={`${opt.value}-${optIdx}`}
                                   type="button"
                                   disabled={isStarted}
                                   onClick={() => {

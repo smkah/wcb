@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Trophy, Calendar, Users, TrendingUp, LogOut, Menu, X, ShieldAlert, User } from 'lucide-react';
+import { Trophy, Calendar, Users, TrendingUp, LogOut, Menu, X, ShieldAlert, User, HelpCircle, Gamepad2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -28,6 +28,8 @@ export default function Navbar() {
     { name: 'Partidas', icon: Calendar, href: '/dashboard/matches' },
     { name: 'Ranking', icon: Trophy, href: '/dashboard/ranking' },
     { name: 'Bolões', icon: Users, href: '/dashboard/groups' },
+    { name: 'Regras', icon: HelpCircle, href: '/dashboard/rules' },
+    { name: 'Game', icon: Gamepad2, href: '/dashboard/game' },
     { name: 'Perfil', icon: User, href: '/dashboard/profile' },
   ];
 

@@ -26,7 +26,7 @@ export default function MatchStatsModal({ isOpen, onClose, match }: MatchStatsMo
       try {
         const { data, error } = await supabase
           .from('guesses')
-          .select('*, profiles(id, email, full_name, avatar_url)')
+          .select('*, profiles(id, email, full_name, username, avatar_url)')
           .eq('match_id', match.id);
 
         if (error) throw error;
@@ -337,7 +337,12 @@ export default function MatchStatsModal({ isOpen, onClose, match }: MatchStatsMo
                             )}
                           </div>
                           <div>
-                            <p className="text-xs font-black text-white">{g.profiles?.full_name || g.profiles?.email?.split('@')[0]}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-black text-white">{g.profiles?.full_name || g.profiles?.email?.split('@')[0]}</p>
+                              {g.profiles?.username && (
+                                <span className="text-[10px] font-bold text-emerald-400">@{g.profiles.username}</span>
+                              )}
+                            </div>
                             <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
                               {g.yellow_cards_winner ? `MA: ${g.yellow_cards_winner.substring(0,3).toUpperCase()}` : 'MA: -'} • 
                               {g.has_red_card === true ? ' CV: Sim' : g.has_red_card === false ? ' CV: Não' : ' CV: -'}

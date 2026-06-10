@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'motion/react';
 import { supabase } from '@/lib/supabase';
-import { Trophy, Mail, Lock, Loader2, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Trophy, Mail, Lock, Loader2, ArrowLeft, AlertTriangle, User } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -17,6 +17,7 @@ function LoginContent() {
   
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -55,18 +56,39 @@ function LoginContent() {
 
     try {
       if (mode === 'signup') {
+        if (!username.trim()) {
+          throw new Error('O nome de usuário é obrigatório.');
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: {
+              username: username.trim().toLowerCase(),
+              full_name: username.trim(),
+            }
           },
         });
         if (error) throw error;
         toast.success('Conta criada! Confirme seu e-mail para continuar.');
       } else {
+        let finalEmail = email.trim();
+        if (!finalEmail.includes('@')) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', finalEmail.toLowerCase())
+            .maybeSingle();
+
+          if (profileError || !profileData) {
+            throw new Error('Nome de usuário não encontrado.');
+          }
+          finalEmail = profileData.email;
+        }
+
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: finalEmail,
           password,
         });
         if (error) throw error;
@@ -147,17 +169,36 @@ function LoginContent() {
               </div>
             )}
 
+            {mode === 'signup' && (
+              <div className="flex flex-col gap-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nome de Usuário</label>
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+                  <input
+                    type="text"
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_.-]/g, ''))}
+                    className="w-full pl-12 pr-4 py-4 bg-slate-900/50 rounded-2xl border border-slate-700/50 text-white focus:ring-2 focus:ring-emerald-500/50 transition-all outline-none font-medium placeholder:text-slate-700"
+                    placeholder="usuario"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-3">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Seu E-mail</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                {mode === 'login' ? 'E-mail ou Usuário' : 'Seu E-mail'}
+              </label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
                 <input
-                  type="email"
+                  type={mode === 'login' ? 'text' : 'email'}
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-12 pr-4 py-4 bg-slate-900/50 rounded-2xl border border-slate-700/50 text-white focus:ring-2 focus:ring-emerald-500/50 transition-all outline-none font-medium placeholder:text-slate-700"
-                  placeholder="seu@email.com"
+                  placeholder={mode === 'login' ? 'seu@email.com ou usuario' : 'seu@email.com'}
                 />
               </div>
             </div>
