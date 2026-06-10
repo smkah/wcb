@@ -723,7 +723,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m73",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-06-28",
       "time": "12:00 UTC-7",
       "team1": "2A",
@@ -732,7 +732,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m74",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-06-29",
       "time": "16:30 UTC-4",
       "team1": "1E",
@@ -741,7 +741,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m75",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-06-29",
       "time": "19:00 UTC-6",
       "team1": "1F",
@@ -750,7 +750,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m76",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-06-29",
       "time": "12:00 UTC-5",
       "team1": "1C",
@@ -759,7 +759,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m77",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-06-30",
       "time": "17:00 UTC-4",
       "team1": "1I",
@@ -768,7 +768,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m78",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-06-30",
       "time": "12:00 UTC-5",
       "team1": "2E",
@@ -777,7 +777,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m79",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-06-30",
       "time": "19:00 UTC-6",
       "team1": "1A",
@@ -786,7 +786,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m80",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-01",
       "time": "12:00 UTC-4",
       "team1": "1L",
@@ -795,7 +795,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m81",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-01",
       "time": "17:00 UTC-7",
       "team1": "1D",
@@ -804,7 +804,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m82",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-01",
       "time": "13:00 UTC-7",
       "team1": "1G",
@@ -813,7 +813,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m83",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-02",
       "time": "19:00 UTC-4",
       "team1": "2K",
@@ -822,7 +822,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m84",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-02",
       "time": "12:00 UTC-7",
       "team1": "1H",
@@ -831,7 +831,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m85",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-02",
       "time": "20:00 UTC-7",
       "team1": "1B",
@@ -840,7 +840,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m86",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-03",
       "time": "18:00 UTC-4",
       "team1": "1J",
@@ -849,7 +849,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m87",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-03",
       "time": "20:30 UTC-5",
       "team1": "1K",
@@ -858,7 +858,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m88",
-      "round": "Round of 32",
+      "round": "16-avos de final",
       "date": "2026-07-03",
       "time": "13:00 UTC-5",
       "team1": "2D",
@@ -867,7 +867,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m89",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-04",
       "time": "17:00 UTC-4",
       "team1": "W74",
@@ -876,7 +876,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m90",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-04",
       "time": "12:00 UTC-5",
       "team1": "W73",
@@ -885,7 +885,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m91",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-05",
       "time": "16:00 UTC-4",
       "team1": "W76",
@@ -894,7 +894,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m92",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-05",
       "time": "18:00 UTC-6",
       "team1": "W79",
@@ -903,7 +903,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m93",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-06",
       "time": "14:00 UTC-5",
       "team1": "W83",
@@ -912,7 +912,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m94",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-06",
       "time": "17:00 UTC-7",
       "team1": "W81",
@@ -921,7 +921,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m95",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-07",
       "time": "12:00 UTC-4",
       "team1": "W86",
@@ -930,7 +930,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m96",
-      "round": "Round of 16",
+      "round": "Oitavas de final",
       "date": "2026-07-07",
       "time": "13:00 UTC-7",
       "team1": "W85",
@@ -939,7 +939,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m97",
-      "round": "Quarter-final",
+      "round": "Quartas de final",
       "date": "2026-07-09",
       "time": "16:00 UTC-4",
       "team1": "W89",
@@ -948,7 +948,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m98",
-      "round": "Quarter-final",
+      "round": "Quartas de final",
       "date": "2026-07-10",
       "time": "12:00 UTC-7",
       "team1": "W93",
@@ -957,7 +957,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m99",
-      "round": "Quarter-final",
+      "round": "Quartas de final",
       "date": "2026-07-11",
       "time": "17:00 UTC-4",
       "team1": "W91",
@@ -966,7 +966,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m100",
-      "round": "Quarter-final",
+      "round": "Quartas de final",
       "date": "2026-07-11",
       "time": "20:00 UTC-5",
       "team1": "W95",
@@ -993,7 +993,7 @@ export const WORLD_CUP_DATA = {
     },
     {
       "id": "m103",
-      "round": "Match for third place",
+      "round": "Disputa pelo 3º Lugar",
       "date": "2026-07-18",
       "time": "17:00 UTC-4",
       "team1": "L101",
