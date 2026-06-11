@@ -563,6 +563,420 @@ export default function MatchesPage() {
     }
   };
 
+  const renderMatchCard = (match: any, i: number) => {
+    const guess = guesses[match.id] || { scoreA: '', scoreB: '' };
+    const isSaving = saving === match.id;
+    const isSaved = saved === match.id;
+    const isStarted = !isAdmin && isMatchStarted(match);
+
+    if (viewMode === 'list') {
+      return (
+        <motion.div
+          key={match.id}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: i * 0.01 }}
+          className="glass p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-emerald-500/30 transition-all"
+        >
+          <div className="flex items-center gap-4 min-w-[120px]">
+             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/50 px-3 py-1 rounded-md">
+               {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
+             </span>
+          </div>
+
+          <div className="flex flex-col flex-1 w-full gap-3">
+            <div className="flex items-center gap-2 sm:gap-4 justify-center w-full">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-end min-w-0">
+                <span className="font-bold text-[10px] md:text-sm uppercase truncate text-right">{match.team1}</span>
+                <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                  <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                <input
+                  type="text"
+                  value={guess.scoreA}
+                  onChange={(e) => handleScoreChange(match.id, 'A', e.target.value)}
+                  disabled={isStarted}
+                  className="w-8 h-8 sm:w-10 sm:h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-xs sm:text-lg focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="0"
+                />
+                <span className="font-black text-slate-700 italic text-xs sm:text-base">X</span>
+                <input
+                  type="text"
+                  value={guess.scoreB}
+                  onChange={(e) => handleScoreChange(match.id, 'B', e.target.value)}
+                  disabled={isStarted}
+                  className="w-8 h-8 sm:w-10 sm:h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-xs sm:text-lg focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
+                <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                  <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" />
+                </div>
+                <span className="font-bold text-[10px] md:text-sm uppercase truncate text-left">{match.team2}</span>
+              </div>
+            </div>
+
+            {/* Standard card rules (Yellow / Red cards) */}
+            <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2 flex-shrink-0 mt-2">
+              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Cartões do Jogo</p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-between">
+                {/* Yellow Cards Winner */}
+                <div className="flex items-center justify-between gap-2 flex-1">
+                  <span className="text-[9px] text-slate-400 font-bold">Mais Amarelos (3 pts)</span>
+                  <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                    {[
+                      { value: match.team1, label: match.team1.substring(0,3).toUpperCase() },
+                      { value: 'Empate', label: 'EMP' },
+                      { value: match.team2, label: match.team2.substring(0,3).toUpperCase() }
+                    ].map((opt, optIdx) => (
+                      <button
+                        key={`${opt.value}-${optIdx}`}
+                        type="button"
+                        disabled={isStarted}
+                        onClick={() => {
+                          setGuesses(prev => ({
+                            ...prev,
+                            [match.id]: {
+                              ...prev[match.id] || { scoreA: '', scoreB: '' },
+                              yellowCardsWinner: opt.value
+                            }
+                          }));
+                        }}
+                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
+                          guess.yellowCardsWinner === opt.value
+                            ? 'bg-amber-500 text-slate-900 shadow'
+                            : 'text-slate-500 hover:text-slate-300'
+                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Red Card */}
+                <div className="flex items-center justify-between gap-2 flex-1">
+                  <span className="text-[9px] text-slate-400 font-bold">Terá Vermelho? (4 pts)</span>
+                  <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                    {[
+                      { value: true, label: 'SIM' },
+                      { value: false, label: 'NÃO' }
+                    ].map(opt => (
+                      <button
+                        key={String(opt.value)}
+                        type="button"
+                        disabled={isStarted}
+                        onClick={() => {
+                          setGuesses(prev => ({
+                            ...prev,
+                            [match.id]: {
+                              ...prev[match.id] || { scoreA: '', scoreB: '' },
+                              hasRedCard: opt.value
+                            }
+                          }));
+                        }}
+                        className={`px-2.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
+                          guess.hasRedCard === opt.value
+                            ? 'bg-emerald-500 text-slate-900 shadow'
+                            : 'text-slate-500 hover:text-slate-300'
+                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom rules in List mode */}
+            {userGroups.length > 0 && userGroups.some(g => (Array.isArray(g.custom_rules) ? g.custom_rules : Object.keys(g.custom_rules || {})).length > 0) && (
+              <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2 flex-shrink-0">
+                <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Regras Personalizadas</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                  {userGroups.map((group: any) => {
+                    const rules = Array.isArray(group.custom_rules) 
+                      ? group.custom_rules 
+                      : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
+                    if (rules.length === 0) return null;
+                    return rules.map((rule: any) => {
+                      const ruleName = rule.regra;
+                      const points = rule.pontos;
+                      const key = `${group.id}_${ruleName}`;
+                      const customGuess = guess.custom_guesses?.[key] || '';
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-2 border-b border-white/5 pb-1">
+                          <span className="text-[9px] text-slate-400 font-bold truncate max-w-[150px]" title={`${group.name}: ${ruleName}`}>{ruleName} <span className="text-[7px] text-slate-500 font-normal">({points} pts)</span></span>
+                          <input
+                            type="text"
+                            value={customGuess}
+                            onChange={(e) => handleCustomGuessChange(match.id, group.id, ruleName, e.target.value)}
+                            disabled={isStarted}
+                            placeholder="Palpite"
+                            className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-[9px] text-white focus:border-emerald-500 outline-none w-20 text-center font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                        </div>
+                      );
+                    });
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setStatsModal({ isOpen: true, match })}
+              className="p-2.5 text-slate-500 hover:text-emerald-400 transition-colors bg-slate-900/50 rounded-xl"
+              title="Estatísticas e Palpites"
+            >
+              <BarChart2 size={16} />
+            </button>
+            <button
+              onClick={() => setHistoryModal({ isOpen: true, teamA: match.team1, teamB: match.team2 })}
+              className="p-2.5 text-slate-500 hover:text-emerald-400 transition-colors bg-slate-900/50 rounded-xl"
+              title="Histórico de Confrontos"
+            >
+              <History size={16} />
+            </button>
+            {isAdmin && (
+              <button className="p-2.5 text-slate-500 hover:text-cyan-400 transition-colors" title="Editar Jogo">
+                <Edit2 size={16} />
+              </button>
+            )}
+            <button
+              onClick={() => handleSaveGuess(match.id)}
+              disabled={!guess.scoreA || !guess.scoreB || isSaving || isStarted}
+              className={`p-2.5 rounded-xl transition-all ${
+                isSaved ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-emerald-400 bg-slate-900/50 hover:bg-emerald-400/10 disabled:opacity-30'
+              }`}
+            >
+              {isSaving ? <Loader2 size={18} className="animate-spin" /> : isSaved ? <CheckCircle2 size={18} /> : <Save size={18} />}
+            </button>
+          </div>
+        </motion.div>
+      );
+    }
+
+    return (
+      <motion.div
+        key={match.id}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: i * 0.02 }}
+        className={`glass rounded-[32px] group hover:border-emerald-500/30 transition-all ${viewMode === 'compact' ? 'p-6' : 'p-8'}`}
+      >
+        <div className={`flex justify-between items-center ${viewMode === 'compact' ? 'mb-6' : 'mb-8'}`}>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-0.5 glass-emerald text-emerald-400 text-[9px] font-black rounded-lg uppercase tracking-widest">
+              {match.round}
+            </span>
+            <button
+              onClick={() => setHistoryModal({ isOpen: true, teamA: match.team1, teamB: match.team2 })}
+              className="p-1 px-2 bg-slate-800/50 text-slate-400 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-400 transition-all"
+              title="Retrospecto"
+            >
+              <History size={10} />
+            </button>
+            {isAdmin && (
+              <button className="p-1 px-2 bg-cyan-500/10 text-cyan-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-cyan-500/20" title="Gerenciar Jogo">
+                <Edit2 size={10} />
+              </button>
+            )}
+          </div>
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+            {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
+          </span>
+        </div>
+
+        <div className={`flex items-center justify-between gap-4 ${viewMode === 'compact' ? 'mb-6' : 'mb-10'}`}>
+          <div className="flex flex-col items-center gap-3 flex-1 text-center">
+            <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
+              <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team1.substring(0,3).toUpperCase()}</span>} />
+            </div>
+            <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team1}</span>
+          </div>
+
+          <div className={`flex items-center ${viewMode === 'compact' ? 'gap-2' : 'gap-4'}`}>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={guess.scoreA}
+              onChange={(e) => handleScoreChange(match.id, 'A', e.target.value)}
+              disabled={isStarted}
+              placeholder="0"
+              className={`${viewMode === 'compact' ? 'w-9 h-11 text-lg sm:w-12 sm:h-14 sm:text-2xl' : 'w-10 h-14 text-xl sm:w-16 sm:h-20 sm:text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800 disabled:opacity-50 disabled:cursor-not-allowed`}
+            />
+            <span className={`font-black text-slate-700 italic ${viewMode === 'compact' ? 'text-base sm:text-xl' : 'text-lg sm:text-2xl'}`}>X</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={guess.scoreB}
+              onChange={(e) => handleScoreChange(match.id, 'B', e.target.value)}
+              disabled={isStarted}
+              placeholder="0"
+              className={`${viewMode === 'compact' ? 'w-9 h-11 text-lg sm:w-12 sm:h-14 sm:text-2xl' : 'w-10 h-14 text-xl sm:w-16 sm:h-20 sm:text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800 disabled:opacity-50 disabled:cursor-not-allowed`}
+            />
+          </div>
+
+          <div className="flex flex-col items-center gap-3 flex-1 text-center">
+            <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
+              <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team2.substring(0,3).toUpperCase()}</span>} />
+            </div>
+            <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team2}</span>
+          </div>
+        </div>
+
+        {/* Standard card rules (Yellow / Red cards) in Grid/Compact Mode */}
+        <div className="mb-6 p-4 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-3">
+          <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Cartões do Jogo</p>
+          
+          <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mais Cartões Amarelos (3 pts)</span>
+              <div className="flex gap-1 bg-slate-900 p-0.5 rounded-xl border border-slate-800 w-full sm:w-auto">
+                {[
+                  { value: match.team1, label: match.team1 },
+                  { value: 'Empate', label: 'Empate' },
+                  { value: match.team2, label: match.team2 }
+                ].map((opt, optIdx) => (
+                  <button
+                    key={`${opt.value}-${optIdx}`}
+                    type="button"
+                    disabled={isStarted}
+                    onClick={() => {
+                      setGuesses(prev => ({
+                        ...prev,
+                        [match.id]: {
+                          ...prev[match.id] || { scoreA: '', scoreB: '' },
+                          yellowCardsWinner: opt.value
+                        }
+                      }));
+                    }}
+                    className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center truncate max-w-[120px] ${
+                      guess.yellowCardsWinner === opt.value
+                        ? 'bg-amber-500 text-slate-900 shadow-md shadow-amber-500/10'
+                        : 'text-slate-500 hover:text-slate-300'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Terá Cartão Vermelho? (4 pts)</span>
+              <div className="flex gap-1 bg-slate-900 p-0.5 rounded-xl border border-slate-800 w-full sm:w-auto">
+                {[
+                  { value: true, label: 'Sim' },
+                  { value: false, label: 'Não' }
+                ].map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    disabled={isStarted}
+                    onClick={() => {
+                      setGuesses(prev => ({
+                        ...prev,
+                        [match.id]: {
+                          ...prev[match.id] || { scoreA: '', scoreB: '' },
+                          hasRedCard: opt.value
+                        }
+                      }));
+                    }}
+                    className={`px-4 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center ${
+                      guess.hasRedCard === opt.value
+                        ? 'bg-emerald-500 text-slate-900 shadow-md shadow-emerald-500/10'
+                        : 'text-slate-500 hover:text-slate-300'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Custom rules in Grid and Compact mode */}
+        {userGroups.length > 0 && userGroups.some(g => (Array.isArray(g.custom_rules) ? g.custom_rules : Object.keys(g.custom_rules || {})).length > 0) && (
+          <div className="mb-6 p-4 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-2.5">
+            <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Regras do Bolão</p>
+            <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+              {userGroups.map((group: any) => {
+                const rules = Array.isArray(group.custom_rules) 
+                  ? group.custom_rules 
+                  : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
+                if (rules.length === 0) return null;
+                return (
+                  <div key={group.id} className="space-y-1">
+                    <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest">{group.name}</p>
+                    {rules.map((rule: any) => {
+                      const ruleName = rule.regra;
+                      const points = rule.pontos;
+                      const key = `${group.id}_${ruleName}`;
+                      const customGuess = guess.custom_guesses?.[key] || '';
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-2 py-0.5">
+                          <span className="text-[9px] text-slate-300 font-bold truncate max-w-[180px]">{ruleName} <span className="text-[7px] text-slate-500 font-normal">({points} pts)</span></span>
+                          <input
+                            type="text"
+                            value={customGuess}
+                            onChange={(e) => handleCustomGuessChange(match.id, group.id, ruleName, e.target.value)}
+                            disabled={isStarted}
+                            placeholder="Palpite"
+                            className="px-2 py-1 bg-slate-900 border border-slate-800 rounded-lg text-[9px] text-white focus:border-emerald-500 outline-none w-24 text-center font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className={`flex flex-col sm:flex-row items-center justify-between border-t border-slate-700/50 ${viewMode === 'compact' ? 'pt-4 gap-4' : 'pt-8 gap-6'}`}>
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-700" />
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-none">{match.ground}</span>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setStatsModal({ isOpen: true, match })}
+              className="p-3 bg-slate-900 border border-slate-800 text-slate-500 hover:text-emerald-400 rounded-xl transition-all"
+              title="Estatísticas e Palpites"
+            >
+              <BarChart2 size={14} />
+            </button>
+            <button
+              onClick={() => handleSaveGuess(match.id)}
+              disabled={!guess.scoreA || !guess.scoreB || isSaving || isStarted}
+              className={`flex items-center justify-center gap-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all w-full sm:w-auto shadow-lg shadow-emerald-500/20 ${
+                viewMode === 'compact' ? 'px-4 py-2' : 'px-8 py-3'
+              } ${
+                isSaved 
+                  ? 'bg-emerald-500 text-slate-900' 
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-900 disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none'
+              }`}
+            >
+              {isSaving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+              {isSaved ? 'SALVO' : viewMode === 'compact' ? 'SALVAR' : 'SALVAR PALPITE'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#0F172A] text-slate-100">
       <Navbar />
@@ -693,425 +1107,49 @@ export default function MatchesPage() {
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className={`grid gap-6 ${
-                viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 
-                viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 
-                'grid-cols-1'
-              }`}>
-                {(roundMatches as any[]).map((match, i) => {
-                  const guess = guesses[match.id] || { scoreA: '', scoreB: '' };
-                  const isSaving = saving === match.id;
-                  const isSaved = saved === match.id;
-                  const isStarted = !isAdmin && isMatchStarted(match);
-
-                  if (viewMode === 'list') {
-                    return (
-                      <motion.div
-                        key={match.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.01 }}
-                        className="glass p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-emerald-500/30 transition-all"
-                      >
-                        <div className="flex items-center gap-4 min-w-[120px]">
-                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/50 px-3 py-1 rounded-md">
-                             {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
-                           </span>
-                        </div>
-
-                        <div className="flex flex-col flex-1 w-full gap-3">
-                          <div className="flex items-center gap-2 sm:gap-4 justify-center w-full">
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-end min-w-0">
-                              <span className="font-bold text-[10px] md:text-sm uppercase truncate text-right">{match.team1}</span>
-                              <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                                <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" />
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                              <input
-                                type="text"
-                                value={guess.scoreA}
-                                onChange={(e) => handleScoreChange(match.id, 'A', e.target.value)}
-                                disabled={isStarted}
-                                className="w-8 h-8 sm:w-10 sm:h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-xs sm:text-lg focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                placeholder="0"
-                              />
-                              <span className="font-black text-slate-700 italic text-xs sm:text-base">X</span>
-                              <input
-                                type="text"
-                                value={guess.scoreB}
-                                onChange={(e) => handleScoreChange(match.id, 'B', e.target.value)}
-                                disabled={isStarted}
-                                className="w-8 h-8 sm:w-10 sm:h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-xs sm:text-lg focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                placeholder="0"
-                              />
-                            </div>
-
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
-                              <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                                <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" />
-                              </div>
-                              <span className="font-bold text-[10px] md:text-sm uppercase truncate text-left">{match.team2}</span>
-                            </div>
-                          </div>
-
-                          {/* Standard card rules (Yellow / Red cards) */}
-                          <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2 flex-shrink-0 mt-2">
-                            <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Cartões do Jogo</p>
-                            <div className="flex flex-col sm:flex-row gap-4 justify-between">
-                              {/* Yellow Cards Winner */}
-                              <div className="flex items-center justify-between gap-2 flex-1">
-                                <span className="text-[9px] text-slate-400 font-bold">Mais Amarelos (3 pts)</span>
-                                <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                                  {[
-                                    { value: match.team1, label: match.team1.substring(0,3).toUpperCase() },
-                                    { value: 'Empate', label: 'EMP' },
-                                    { value: match.team2, label: match.team2.substring(0,3).toUpperCase() }
-                                  ].map((opt, optIdx) => (
-                                    <button
-                                      key={`${opt.value}-${optIdx}`}
-                                      type="button"
-                                      disabled={isStarted}
-                                      onClick={() => {
-                                        setGuesses(prev => ({
-                                          ...prev,
-                                          [match.id]: {
-                                            ...prev[match.id] || { scoreA: '', scoreB: '' },
-                                            yellowCardsWinner: opt.value
-                                          }
-                                        }));
-                                      }}
-                                      className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
-                                        guess.yellowCardsWinner === opt.value
-                                          ? 'bg-amber-500 text-slate-900 shadow'
-                                          : 'text-slate-500 hover:text-slate-300'
-                                      } disabled:opacity-40 disabled:cursor-not-allowed`}
-                                    >
-                                      {opt.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-
-                              {/* Red Card */}
-                              <div className="flex items-center justify-between gap-2 flex-1">
-                                <span className="text-[9px] text-slate-400 font-bold">Terá Vermelho? (4 pts)</span>
-                                <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                                  {[
-                                    { value: true, label: 'SIM' },
-                                    { value: false, label: 'NÃO' }
-                                  ].map(opt => (
-                                    <button
-                                      key={String(opt.value)}
-                                      type="button"
-                                      disabled={isStarted}
-                                      onClick={() => {
-                                        setGuesses(prev => ({
-                                          ...prev,
-                                          [match.id]: {
-                                            ...prev[match.id] || { scoreA: '', scoreB: '' },
-                                            hasRedCard: opt.value
-                                          }
-                                        }));
-                                      }}
-                                      className={`px-2.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
-                                        guess.hasRedCard === opt.value
-                                          ? 'bg-emerald-500 text-slate-900 shadow'
-                                          : 'text-slate-500 hover:text-slate-300'
-                                      } disabled:opacity-40 disabled:cursor-not-allowed`}
-                                    >
-                                      {opt.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Custom rules in List mode */}
-                          {userGroups.length > 0 && userGroups.some(g => (Array.isArray(g.custom_rules) ? g.custom_rules : Object.keys(g.custom_rules || {})).length > 0) && (
-                            <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2 flex-shrink-0">
-                              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Regras Personalizadas</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-                                {userGroups.map((group: any) => {
-                                  const rules = Array.isArray(group.custom_rules) 
-                                    ? group.custom_rules 
-                                    : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
-                                  if (rules.length === 0) return null;
-                                  return rules.map((rule: any) => {
-                                    const ruleName = rule.regra;
-                                    const points = rule.pontos;
-                                    const key = `${group.id}_${ruleName}`;
-                                    const customGuess = guess.custom_guesses?.[key] || '';
-                                    return (
-                                      <div key={key} className="flex items-center justify-between gap-2 border-b border-white/5 pb-1">
-                                        <span className="text-[9px] text-slate-400 font-bold truncate max-w-[150px]" title={`${group.name}: ${ruleName}`}>{ruleName} <span className="text-[7px] text-slate-500 font-normal">({points} pts)</span></span>
-                                        <input
-                                          type="text"
-                                          value={customGuess}
-                                          onChange={(e) => handleCustomGuessChange(match.id, group.id, ruleName, e.target.value)}
-                                          disabled={isStarted}
-                                          placeholder="Palpite"
-                                          className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-[9px] text-white focus:border-emerald-500 outline-none w-20 text-center font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                                        />
+                                {round === "FASE DE GRUPOS" ? (
+                          (() => {
+                            const groupsMap: Record<string, any[]> = {};
+                            (roundMatches as any[]).forEach(match => {
+                              const letter = match.group || 'Outros';
+                              if (!groupsMap[letter]) groupsMap[letter] = [];
+                              groupsMap[letter].push(match);
+                            });
+                            const sortedGroupLetters = Object.keys(groupsMap).sort();
+                            return (
+                              <div className="space-y-16">
+                                {sortedGroupLetters.map((groupLetter) => {
+                                  const groupMatchesList = groupsMap[groupLetter];
+                                  return (
+                                    <div key={groupLetter} className="space-y-6">
+                                      <div className="flex items-center gap-4">
+                                        <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-black uppercase tracking-widest rounded-xl">
+                                          GRUPO {groupLetter.toUpperCase()}
+                                        </span>
+                                        <div className="h-px flex-1 bg-slate-800/40" />
                                       </div>
-                                    );
-                                  });
+                                      <div className={`grid gap-6 ${
+                                        viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 
+                                        viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 
+                                        'grid-cols-1'
+                                      }`}>
+                                        {groupMatchesList.map((match, i) => renderMatchCard(match, i))}
+                                      </div>
+                                    </div>
+                                  );
                                 })}
                               </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => setStatsModal({ isOpen: true, match })}
-                            className="p-2.5 text-slate-500 hover:text-emerald-400 transition-colors bg-slate-900/50 rounded-xl"
-                            title="Estatísticas e Palpites"
-                          >
-                            <BarChart2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => setHistoryModal({ isOpen: true, teamA: match.team1, teamB: match.team2 })}
-                            className="p-2.5 text-slate-500 hover:text-emerald-400 transition-colors bg-slate-900/50 rounded-xl"
-                            title="Histórico de Confrontos"
-                          >
-                            <History size={16} />
-                          </button>
-                          {isAdmin && (
-                            <button className="p-2.5 text-slate-500 hover:text-cyan-400 transition-colors" title="Editar Jogo">
-                              <Edit2 size={16} />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleSaveGuess(match.id)}
-                            disabled={!guess.scoreA || !guess.scoreB || isSaving || isStarted}
-                            className={`p-2.5 rounded-xl transition-all ${
-                              isSaved ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-emerald-400 bg-slate-900/50 hover:bg-emerald-400/10 disabled:opacity-30'
-                            }`}
-                          >
-                            {isSaving ? <Loader2 size={18} className="animate-spin" /> : isSaved ? <CheckCircle2 size={18} /> : <Save size={18} />}
-                          </button>
-                        </div>
-                      </motion.div>
-                    );
-                  }
-
-                  return (
-                    <motion.div
-                      key={match.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.02 }}
-                      className={`glass rounded-[32px] group hover:border-emerald-500/30 transition-all ${viewMode === 'compact' ? 'p-6' : 'p-8'}`}
-                    >
-                      <div className={`flex justify-between items-center ${viewMode === 'compact' ? 'mb-6' : 'mb-8'}`}>
-                        <div className="flex items-center gap-2">
-                          <span className="px-3 py-0.5 glass-emerald text-emerald-400 text-[9px] font-black rounded-lg uppercase tracking-widest">
-                            {match.round}
-                          </span>
-                          <button
-                            onClick={() => setHistoryModal({ isOpen: true, teamA: match.team1, teamB: match.team2 })}
-                            className="p-1 px-2 bg-slate-800/50 text-slate-400 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-400 transition-all"
-                            title="Retrospecto"
-                          >
-                            <History size={10} />
-                          </button>
-                          {isAdmin && (
-                            <button className="p-1 px-2 bg-cyan-500/10 text-cyan-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-cyan-500/20" title="Gerenciar Jogo">
-                              <Edit2 size={10} />
-                            </button>
-                          )}
-                        </div>
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                          {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
-                        </span>
-                      </div>
-
-                      <div className={`flex items-center justify-between gap-4 ${viewMode === 'compact' ? 'mb-6' : 'mb-10'}`}>
-                        <div className="flex flex-col items-center gap-3 flex-1 text-center">
-                          <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
-                            <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team1.substring(0,3).toUpperCase()}</span>} />
+                            );
+                          })()
+                        ) : (
+                          <div className={`grid gap-6 ${
+                            viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 
+                            viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 
+                            'grid-cols-1'
+                          }`}>
+                            {(roundMatches as any[]).map((match, i) => renderMatchCard(match, i))}
                           </div>
-                          <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team1}</span>
-                        </div>
-
-                        <div className={`flex items-center ${viewMode === 'compact' ? 'gap-2' : 'gap-4'}`}>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={guess.scoreA}
-                            onChange={(e) => handleScoreChange(match.id, 'A', e.target.value)}
-                            disabled={isStarted}
-                            placeholder="0"
-                            className={`${viewMode === 'compact' ? 'w-9 h-11 text-lg sm:w-12 sm:h-14 sm:text-2xl' : 'w-10 h-14 text-xl sm:w-16 sm:h-20 sm:text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          />
-                          <span className={`font-black text-slate-700 italic ${viewMode === 'compact' ? 'text-base sm:text-xl' : 'text-lg sm:text-2xl'}`}>X</span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={guess.scoreB}
-                            onChange={(e) => handleScoreChange(match.id, 'B', e.target.value)}
-                            disabled={isStarted}
-                            placeholder="0"
-                            className={`${viewMode === 'compact' ? 'w-9 h-11 text-lg sm:w-12 sm:h-14 sm:text-2xl' : 'w-10 h-14 text-xl sm:w-16 sm:h-20 sm:text-4xl'} text-center font-black bg-slate-900 rounded-2xl border border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-800 disabled:opacity-50 disabled:cursor-not-allowed`}
-                          />
-                        </div>
-
-                        <div className="flex flex-col items-center gap-3 flex-1 text-center">
-                          <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
-                            <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team2.substring(0,3).toUpperCase()}</span>} />
-                          </div>
-                          <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team2}</span>
-                        </div>
-                      </div>
-
-                      {/* Standard card rules (Yellow / Red cards) in Grid/Compact Mode */}
-                      <div className="mb-6 p-4 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-3">
-                        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Cartões do Jogo</p>
-                        
-                        <div className="flex flex-col gap-2.5">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mais Cartões Amarelos (3 pts)</span>
-                            <div className="flex gap-1 bg-slate-900 p-0.5 rounded-xl border border-slate-800 w-full sm:w-auto">
-                              {[
-                                { value: match.team1, label: match.team1 },
-                                { value: 'Empate', label: 'Empate' },
-                                { value: match.team2, label: match.team2 }
-                              ].map((opt, optIdx) => (
-                                <button
-                                  key={`${opt.value}-${optIdx}`}
-                                  type="button"
-                                  disabled={isStarted}
-                                  onClick={() => {
-                                    setGuesses(prev => ({
-                                      ...prev,
-                                      [match.id]: {
-                                        ...prev[match.id] || { scoreA: '', scoreB: '' },
-                                        yellowCardsWinner: opt.value
-                                      }
-                                    }));
-                                  }}
-                                  className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center truncate max-w-[120px] ${
-                                    guess.yellowCardsWinner === opt.value
-                                      ? 'bg-amber-500 text-slate-900 shadow-md shadow-amber-500/10'
-                                      : 'text-slate-500 hover:text-slate-300'
-                                  } disabled:opacity-40 disabled:cursor-not-allowed`}
-                                >
-                                  {opt.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Terá Cartão Vermelho? (4 pts)</span>
-                            <div className="flex gap-1 bg-slate-900 p-0.5 rounded-xl border border-slate-800 w-full sm:w-auto">
-                              {[
-                                { value: true, label: 'Sim' },
-                                { value: false, label: 'Não' }
-                              ].map(opt => (
-                                <button
-                                  key={String(opt.value)}
-                                  type="button"
-                                  disabled={isStarted}
-                                  onClick={() => {
-                                    setGuesses(prev => ({
-                                      ...prev,
-                                      [match.id]: {
-                                        ...prev[match.id] || { scoreA: '', scoreB: '' },
-                                        hasRedCard: opt.value
-                                      }
-                                    }));
-                                  }}
-                                  className={`px-4 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center ${
-                                    guess.hasRedCard === opt.value
-                                      ? 'bg-emerald-500 text-slate-900 shadow-md shadow-emerald-500/10'
-                                      : 'text-slate-500 hover:text-slate-300'
-                                  } disabled:opacity-40 disabled:cursor-not-allowed`}
-                                >
-                                  {opt.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Custom rules in Grid and Compact mode */}
-                      {userGroups.length > 0 && userGroups.some(g => (Array.isArray(g.custom_rules) ? g.custom_rules : Object.keys(g.custom_rules || {})).length > 0) && (
-                        <div className="mb-6 p-4 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-2.5">
-                          <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Regras do Bolão</p>
-                          <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                            {userGroups.map((group: any) => {
-                              const rules = Array.isArray(group.custom_rules) 
-                                ? group.custom_rules 
-                                : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
-                              if (rules.length === 0) return null;
-                              return (
-                                <div key={group.id} className="space-y-1">
-                                  <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest">{group.name}</p>
-                                  {rules.map((rule: any) => {
-                                    const ruleName = rule.regra;
-                                    const points = rule.pontos;
-                                    const key = `${group.id}_${ruleName}`;
-                                    const customGuess = guess.custom_guesses?.[key] || '';
-                                    return (
-                                      <div key={key} className="flex items-center justify-between gap-2 py-0.5">
-                                        <span className="text-[9px] text-slate-300 font-bold truncate max-w-[180px]">{ruleName} <span className="text-[7px] text-slate-500 font-normal">({points} pts)</span></span>
-                                        <input
-                                          type="text"
-                                          value={customGuess}
-                                          onChange={(e) => handleCustomGuessChange(match.id, group.id, ruleName, e.target.value)}
-                                          disabled={isStarted}
-                                          placeholder="Palpite"
-                                          className="px-2 py-1 bg-slate-900 border border-slate-800 rounded-lg text-[9px] text-white focus:border-emerald-500 outline-none w-24 text-center font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className={`flex flex-col sm:flex-row items-center justify-between border-t border-slate-700/50 ${viewMode === 'compact' ? 'pt-4 gap-4' : 'pt-8 gap-6'}`}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-700" />
-                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-none">{match.ground}</span>
-                        </div>
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                          <button
-                            type="button"
-                            onClick={() => setStatsModal({ isOpen: true, match })}
-                            className="p-3 bg-slate-900 border border-slate-800 text-slate-500 hover:text-emerald-400 rounded-xl transition-all"
-                            title="Estatísticas e Palpites"
-                          >
-                            <BarChart2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleSaveGuess(match.id)}
-                            disabled={!guess.scoreA || !guess.scoreB || isSaving || isStarted}
-                          className={`flex items-center justify-center gap-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all w-full sm:w-auto shadow-lg shadow-emerald-500/20 ${
-                            viewMode === 'compact' ? 'px-4 py-2' : 'px-8 py-3'
-                          } ${
-                            isSaved 
-                              ? 'bg-emerald-500 text-slate-900' 
-                              : 'bg-emerald-500 hover:bg-emerald-400 text-slate-900 disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none'
-                          }`}
-                        >
-                          {isSaving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle2 size={14} /> : <Save size={14} />}
-                          {isSaved ? 'SALVO' : viewMode === 'compact' ? 'SALVAR' : 'SALVAR PALPITE'}
-                        </button>
-                      </div>
-                    </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
+                        )}
             </motion.div>
           )}
         </AnimatePresence>
