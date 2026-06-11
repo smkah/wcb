@@ -92,6 +92,41 @@ export default function AdminPage() {
     checkUser();
   }, [router]);
 
+  const getPhaseName = (round: string, group?: string) => {
+    const r = round.toLowerCase();
+    if (r.includes('matchday') || group) {
+      return "FASE DE GRUPOS";
+    }
+    if (r.includes('16-avos') || r.includes('32')) {
+      return "16-AVOS DE FINAL";
+    }
+    if (r.includes('oitavas') || r.includes('16')) {
+      return "OITAVAS DE FINAL";
+    }
+    if (r.includes('quartas') || r.includes('quarter')) {
+      return "QUARTAS DE FINAL";
+    }
+    if (r.includes('semifinal') || r.includes('semi')) {
+      return "SEMIFINAIS";
+    }
+    if (r.includes('3º') || r.includes('terceiro') || r.includes('third')) {
+      return "DISPUTA DO 3º LUGAR";
+    }
+    if (r.includes('final')) {
+      return "FINAL";
+    }
+    return round.toUpperCase();
+  };
+
+  const phaseTotalMatches = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    data.matches.forEach(m => {
+      const phase = getPhaseName(m.round, m.group);
+      counts[phase] = (counts[phase] || 0) + 1;
+    });
+    return counts;
+  }, [data.matches]);
+
   if (!isSupabaseConfigured) {
     return (
       <div className="min-h-screen bg-[#0F172A] flex items-center justify-center p-6">
@@ -326,42 +361,6 @@ export default function AdminPage() {
     });
     return Array.from(teams);
   };
-
-  const getPhaseName = (round: string, group?: string) => {
-    const r = round.toLowerCase();
-    if (r.includes('matchday') || group) {
-      return "FASE DE GRUPOS";
-    }
-    if (r.includes('16-avos') || r.includes('32')) {
-      return "16-AVOS DE FINAL";
-    }
-    if (r.includes('oitavas') || r.includes('16')) {
-      return "OITAVAS DE FINAL";
-    }
-    if (r.includes('quartas') || r.includes('quarter')) {
-      return "QUARTAS DE FINAL";
-    }
-    if (r.includes('semifinal') || r.includes('semi')) {
-      return "SEMIFINAIS";
-    }
-    if (r.includes('3º') || r.includes('terceiro') || r.includes('third')) {
-      return "DISPUTA DO 3º LUGAR";
-    }
-    if (r.includes('final')) {
-      return "FINAL";
-    }
-    return round.toUpperCase();
-  };
-
-  const phaseTotalMatches = React.useMemo(() => {
-    const counts: Record<string, number> = {};
-    data.matches.forEach(m => {
-      const phase = getPhaseName(m.round, m.group);
-      counts[phase] = (counts[phase] || 0) + 1;
-    });
-    return counts;
-  }, [data.matches]);
-
   const getUserProgressPerPhase = (profileId: string) => {
     const userGuesses = allGuesses.filter(g => g.profile_id === profileId && g.score1 !== null && g.score2 !== null);
     const completedCounts: Record<string, number> = {};
