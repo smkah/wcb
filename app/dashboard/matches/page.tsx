@@ -223,7 +223,7 @@ export default function MatchesPage() {
   // Sort matches inside each group
   Object.keys(groupedMatches).forEach(phase => {
     if (phase === "FASE DE GRUPOS") {
-      groupedMatches[phase].sort((a, b) => {
+      groupedMatches[phase].sort((a: any, b: any) => {
         const groupA = a.group || '';
         const groupB = b.group || '';
         if (groupA !== groupB) {
@@ -237,7 +237,7 @@ export default function MatchesPage() {
         return timeA.localeCompare(timeB);
       });
     } else {
-      groupedMatches[phase].sort((a, b) => {
+      groupedMatches[phase].sort((a: any, b: any) => {
         if (a.date !== b.date) {
           return a.date.localeCompare(b.date);
         }
@@ -248,7 +248,7 @@ export default function MatchesPage() {
     }
   });
 
-  const sortedPhases = Object.keys(groupedMatches).sort((a, b) => {
+  const sortedPhases = Object.keys(groupedMatches).sort((a: string, b: string) => {
     const idxA = phaseOrder.indexOf(a);
     const idxB = phaseOrder.indexOf(b);
     if (idxA !== -1 && idxB !== -1) return idxA - idxB;
@@ -637,7 +637,7 @@ export default function MatchesPage() {
               const roundMatches = groupedMatches[round];
               const isCollapsed = collapsedPhases[round];
               const totalCount = roundMatches.length;
-              const guessedCount = roundMatches.filter(m => {
+              const guessedCount = roundMatches.filter((m: any) => {
                 const g = guesses[m.id];
                 return g && g.scoreA !== '' && g.scoreB !== '';
               }).length;
