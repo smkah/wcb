@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldAlert, Users, Calendar, Settings, ChevronRight, Search, Trash2, Edit, RefreshCw, Plus, CheckCircle2, AlertTriangle, Trophy } from 'lucide-react';
+import { ShieldAlert, Users, Calendar, Settings, ChevronRight, Search, Trash2, Edit, RefreshCw, Plus, CheckCircle2, AlertTriangle, Trophy, Download, Upload } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -29,6 +29,7 @@ export default function AdminPage() {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
+  const [allGuesses, setAllGuesses] = useState<any[]>([]);
 
   // Modal states
   const [editingItem, setEditingItem] = useState<{ type: TabType | 'add_user' | 'add_match' | 'add_group', data: any } | null>(null);
@@ -45,7 +46,7 @@ export default function AdminPage() {
   const fetchAllData = async () => {
     if (!isSupabaseConfigured) return;
     try {
-      const [users, groups, matches] = await Promise.all([
+      const [users, groups, matches, guessesRes] = await Promise.all([
         adminApi.getUsers().catch(e => { 
           console.error("Users fetch error:", e?.message || e); 
           return []; 
@@ -57,10 +58,12 @@ export default function AdminPage() {
         adminApi.getMatches().catch(e => { 
           console.error("Matches fetch error:", e?.message || e); 
           return []; 
-        })
+        }),
+        supabase.from('guesses').select('profile_id, match_id, score1, score2').then(res => res.data || [])
       ]);
-      console.log("Fetched admin data:", { usersCount: users.length, groupsCount: groups.length, matchesCount: matches.length });
+      console.log("Fetched admin data:", { usersCount: users.length, groupsCount: groups.length, matchesCount: matches.length, guessesCount: guessesRes.length });
       setData({ users: users || [], groups: groups || [], matches: matches || [] });
+      setAllGuesses(guessesRes || []);
     } catch (error) {
       console.error("Error fetching admin data:", error);
     } finally {
@@ -266,6 +269,54 @@ export default function AdminPage() {
     }
   };
 
+  const handleExportGuesses = async () => {
+    const toastId = toast.loading("Preparando exportação de palpites...");
+    try {
+      const exportData = await adminApi.exportAllGuesses();
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+        JSON.stringify(exportData, null, 2)
+      )}`;
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", jsonString);
+      const dateStr = new Date().toISOString().split('T')[0];
+      downloadAnchor.setAttribute("download", `wcb_palpites_export_${dateStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      toast.success("Palpites exportados com sucesso!", { id: toastId });
+    } catch (error: any) {
+      toast.error("Erro ao exportar palpites: " + (error.message || error), { id: toastId });
+    }
+  };
+
+  const handleImportGuesses = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    const toastId = toast.loading("Importando palpites...");
+    reader.onload = async (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        if (!json || (!Array.isArray(json.guesses) && !Array.isArray(json.group_predictions))) {
+          throw new Error("Formato de arquivo inválido. O JSON deve conter 'guesses' ou 'group_predictions'.");
+        }
+
+        const guessesCount = json.guesses?.length || 0;
+        const groupPredsCount = json.group_predictions?.length || 0;
+
+        await adminApi.importGuesses(json.guesses || [], json.group_predictions || []);
+        
+        toast.success(`Importação concluída! Carregados ${guessesCount} palpites e ${groupPredsCount} palpites de grupo.`, { id: toastId });
+        await fetchAllData();
+      } catch (error: any) {
+        toast.error("Erro ao importar: " + (error.message || error), { id: toastId });
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
   const getTeamsByGroup = (groupLetter: string) => {
     const groupMatches = data.matches.filter(m => m.group === groupLetter);
     const teams = new Set<string>();
@@ -274,6 +325,54 @@ export default function AdminPage() {
       if (m.team2) teams.add(m.team2);
     });
     return Array.from(teams);
+  };
+
+  const getPhaseName = (round: string, group?: string) => {
+    const r = round.toLowerCase();
+    if (r.includes('matchday') || group) {
+      return "FASE DE GRUPOS";
+    }
+    if (r.includes('16-avos') || r.includes('32')) {
+      return "16-AVOS DE FINAL";
+    }
+    if (r.includes('oitavas') || r.includes('16')) {
+      return "OITAVAS DE FINAL";
+    }
+    if (r.includes('quartas') || r.includes('quarter')) {
+      return "QUARTAS DE FINAL";
+    }
+    if (r.includes('semifinal') || r.includes('semi')) {
+      return "SEMIFINAIS";
+    }
+    if (r.includes('3º') || r.includes('terceiro') || r.includes('third')) {
+      return "DISPUTA DO 3º LUGAR";
+    }
+    if (r.includes('final')) {
+      return "FINAL";
+    }
+    return round.toUpperCase();
+  };
+
+  const phaseTotalMatches = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    data.matches.forEach(m => {
+      const phase = getPhaseName(m.round, m.group);
+      counts[phase] = (counts[phase] || 0) + 1;
+    });
+    return counts;
+  }, [data.matches]);
+
+  const getUserProgressPerPhase = (profileId: string) => {
+    const userGuesses = allGuesses.filter(g => g.profile_id === profileId && g.score1 !== null && g.score2 !== null);
+    const completedCounts: Record<string, number> = {};
+    userGuesses.forEach(g => {
+      const match = data.matches.find(m => m.id === g.match_id);
+      if (match) {
+        const phase = getPhaseName(match.round, match.group);
+        completedCounts[phase] = (completedCounts[phase] || 0) + 1;
+      }
+    });
+    return completedCounts;
   };
 
   return (
@@ -729,6 +828,31 @@ export default function AdminPage() {
                       </div>
                       <span className="font-bold text-xs uppercase tracking-widest text-left">Simular Resultados</span>
                     </button>
+                    <button 
+                      onClick={handleExportGuesses}
+                      disabled={isSyncing}
+                      className="flex items-center gap-4 p-6 bg-slate-900 rounded-3xl border border-slate-800 hover:border-cyan-500/50 transition-all group disabled:opacity-50"
+                    >
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-cyan-400">
+                        <Download size={20} />
+                      </div>
+                      <span className="font-bold text-xs uppercase tracking-widest text-left">Exportar Palpites</span>
+                    </button>
+                    <label 
+                      className={`flex items-center gap-4 p-6 bg-slate-900 rounded-3xl border border-slate-800 hover:border-pink-500/50 transition-all group cursor-pointer ${isSyncing ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-pink-400">
+                        <Upload size={20} />
+                      </div>
+                      <span className="font-bold text-xs uppercase tracking-widest text-left">Importar Palpites</span>
+                      <input 
+                        type="file" 
+                        accept=".json" 
+                        onChange={handleImportGuesses} 
+                        className="hidden" 
+                        disabled={isSyncing}
+                      />
+                    </label>
                     {/* Other actions could go here */}
                   </div>
                 </section>
@@ -776,31 +900,54 @@ export default function AdminPage() {
 
               <div className="grid gap-4">
                 {data.users.map(u => (
-                  <div key={u.id} className="flex items-center justify-between p-5 bg-slate-900/50 rounded-2xl border border-slate-700/50 group hover:border-emerald-500/30 transition-all">
-                    <div className="flex items-center gap-6">
-                      <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center font-black text-emerald-400 border border-slate-700 shadow-inner uppercase">
-                        {u.full_name?.charAt(0) || u.email?.charAt(0) || '?'}
+                  <div key={u.id} className="flex flex-col p-5 bg-slate-900/50 rounded-2xl border border-slate-700/50 group hover:border-emerald-500/30 transition-all gap-4">
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-6">
+                        <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center font-black text-emerald-400 border border-slate-700 shadow-inner uppercase">
+                          {u.full_name?.charAt(0) || u.email?.charAt(0) || '?'}
+                        </div>
+                        <div>
+                          <p className="font-black text-white">{u.full_name || 'Sem Nome'}</p>
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{u.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-black text-white">{u.full_name || 'Sem Nome'}</p>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{u.email}</p>
+                      <div className="flex items-center gap-12">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-[10px] font-black uppercase text-slate-600 tracking-tighter">Pontos</p>
+                          <p className="font-black text-emerald-400">{u.points || 0}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setEditingItem({ type: 'users', data: u })} className="p-3 text-slate-500 hover:text-white transition-colors"><Edit size={18} /></button>
+                          <button 
+                            onClick={() => handleDeleteUser(u.id)}
+                            disabled={isActionLoading === u.id}
+                            className="p-3 text-slate-500 hover:text-red-400 transition-colors disabled:opacity-50"
+                          >
+                            {isActionLoading === u.id ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-12">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-[10px] font-black uppercase text-slate-600 tracking-tighter">Pontos</p>
-                        <p className="font-black text-emerald-400">{u.points || 0}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setEditingItem({ type: 'users', data: u })} className="p-3 text-slate-500 hover:text-white transition-colors"><Edit size={18} /></button>
-                        <button 
-                          onClick={() => handleDeleteUser(u.id)}
-                          disabled={isActionLoading === u.id}
-                          className="p-3 text-slate-500 hover:text-red-400 transition-colors disabled:opacity-50"
-                        >
-                          {isActionLoading === u.id ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                        </button>
-                      </div>
+
+                    {/* Progress grid per phase */}
+                    <div className="mt-2 pt-4 border-t border-slate-800/60 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                      {['FASE DE GRUPOS', '16-AVOS DE FINAL', 'OITAVAS DE FINAL', 'QUARTAS DE FINAL', 'SEMIFINAIS', 'DISPUTA DO 3º LUGAR', 'FINAL'].map(phase => {
+                        const total = phaseTotalMatches[phase] || 0;
+                        if (total === 0) return null;
+                        const completed = getUserProgressPerPhase(u.id)[phase] || 0;
+                        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+                        return (
+                          <div key={phase} className="bg-slate-950 p-2 rounded-xl border border-slate-800/50 text-center flex flex-col justify-between">
+                            <p className="text-[7px] font-black text-slate-500 uppercase tracking-wider truncate" title={phase}>{phase}</p>
+                            <div className="mt-1">
+                              <p className="font-black text-[10px] text-slate-300">{completed}<span className="text-slate-600 text-[8px] font-bold">/{total}</span></p>
+                              <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden mt-1 border border-slate-800">
+                                <div className="bg-emerald-500 h-full rounded-full transition-all" style={{ width: `${percentage}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

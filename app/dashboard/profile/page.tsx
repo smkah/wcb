@@ -7,9 +7,7 @@ import { User, Mail, Save, Loader2, Camera } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import EvolutionChart from '@/components/EvolutionChart';
 
-import { BADGES_DEFINITION, calculateUserBadges } from '@/lib/badges';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -23,10 +21,9 @@ export default function ProfilePage() {
     username: '',
     avatar_url: '',
   });
-  const [userGuesses, setUserGuesses] = useState<any[]>([]);
-  const [userGroupPredictions, setUserGroupPredictions] = useState<any[]>([]);
-  const [groupResults, setGroupResults] = useState<any[]>([]);
-  const [rankingPosition, setRankingPosition] = useState<number | undefined>(undefined);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -53,28 +50,7 @@ export default function ProfilePage() {
             username: data.username || '',
             avatar_url: data.avatar_url || '',
           });
-          setRankingPosition(data.ranking_position || undefined);
         }
-
-        // Fetch user guesses
-        const { data: guessesData } = await supabase
-          .from('guesses')
-          .select('points_earned')
-          .eq('profile_id', currentUser.id);
-        if (guessesData) setUserGuesses(guessesData);
-
-        // Fetch user group predictions
-        const { data: groupPreds } = await supabase
-          .from('group_predictions')
-          .select('*')
-          .eq('profile_id', currentUser.id);
-        if (groupPreds) setUserGroupPredictions(groupPreds);
-
-        // Fetch group results
-        const { data: resultsData } = await supabase
-          .from('group_results')
-          .select('*');
-        if (resultsData) setGroupResults(resultsData);
 
       } catch (err) {
         console.error("Error fetching profile:", err);
@@ -149,6 +125,36 @@ export default function ProfilePage() {
       toast.error("Erro ao salvar perfil");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    if (newPassword.length < 6) {
+      toast.error("A senha deve ter pelo menos 6 caracteres!");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error("As senhas não coincidem!");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+
+      toast.success("Senha atualizada com sucesso!");
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      console.error("Error updating password:", err);
+      toast.error("Erro ao atualizar senha: " + (err.message || "Tente novamente"));
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -258,6 +264,55 @@ export default function ProfilePage() {
               </form>
             </motion.div>
 
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+              className="glass p-10 rounded-[40px] mt-8"
+            >
+              <h3 className="text-xl font-black uppercase tracking-tight mb-6">Alterar Senha</h3>
+              <form onSubmit={handleChangePassword} className="space-y-6">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-2">Nova Senha</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Nova senha (min. 6 caracteres)"
+                      required
+                      className="w-full px-6 py-4 bg-slate-900/50 border border-slate-800 rounded-2xl text-sm font-bold focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] ml-2">Confirmar Nova Senha</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirmar nova senha"
+                      required
+                      className="w-full px-6 py-4 bg-slate-900/50 border border-slate-800 rounded-2xl text-sm font-bold focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800">
+                  <button
+                    type="submit"
+                    disabled={passwordSaving}
+                    className="w-full py-4 bg-cyan-500 text-slate-900 font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-3 hover:bg-cyan-400 active:scale-[0.98] transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                  >
+                    {passwordSaving ? (
+                      <Loader2 className="animate-spin" size={20} />
+                    ) : (
+                      "ATUALIZAR SENHA"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+
             <div className="mt-8 p-6 bg-slate-900/30 rounded-3xl border border-slate-800/50">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-loose">
                 Suas informações de perfil são usadas para identificá-lo nos bolões que você participa. O e-mail é utilizado apenas para login e comunicações importantes.
@@ -266,45 +321,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {user && (
-          <div className="mt-12 space-y-12 pb-20">
-            <EvolutionChart profileId={user.id} />
-            
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Minhas Conquistas</h4>
-                <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Medalhas virtuais desbloqueadas de acordo com seu desempenho</p>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-                {BADGES_DEFINITION.map(badge => {
-                  const earnedList = calculateUserBadges(userGuesses, rankingPosition, userGroupPredictions, groupResults);
-                  const isEarned = earnedList.includes(badge.id);
-                  return (
-                    <div 
-                      key={badge.id}
-                      className={`glass p-5 rounded-2xl flex flex-col items-center text-center justify-between border transition-all duration-300 relative overflow-hidden ${
-                        isEarned 
-                          ? `${badge.color} shadow-lg ${badge.glowColor} scale-100` 
-                          : 'border-slate-800/80 text-slate-600 opacity-40 grayscale scale-95'
-                      }`}
-                      title={badge.description}
-                    >
-                      <div className="text-3xl mb-3">{badge.icon}</div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-100">{badge.name}</p>
-                        <p className="text-[8px] font-bold text-slate-500 mt-1 line-clamp-2 leading-relaxed">{badge.description}</p>
-                      </div>
-                      {!isEarned && (
-                        <div className="absolute top-2 right-2 text-[9px] font-black tracking-widest text-slate-600">🔒</div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );

@@ -14,6 +14,8 @@ import MatchHistoryModal from '@/components/MatchHistoryModal';
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
 import { formatMatchDate, formatMatchTime } from '@/lib/utils';
+import EvolutionChart from '@/components/EvolutionChart';
+import { BADGES_DEFINITION, calculateUserBadges } from '@/lib/badges';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -33,6 +35,10 @@ export default function Dashboard() {
     teamA: '',
     teamB: ''
   });
+  const [userGuesses, setUserGuesses] = useState<any[]>([]);
+  const [userGroupPredictions, setUserGroupPredictions] = useState<any[]>([]);
+  const [groupResults, setGroupResults] = useState<any[]>([]);
+  const [rankingPosition, setRankingPosition] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,6 +58,7 @@ export default function Dashboard() {
 
           if (profile) {
             setProfileName(profile.full_name || currentUser.email?.split('@')[0] || '');
+            setRankingPosition(profile.ranking_position || undefined);
           }
           
           // Fetch groups count
@@ -65,6 +72,26 @@ export default function Dashboard() {
             { label: 'Ranking Global', value: profile?.ranking_position ? `${profile.ranking_position}º` : '-', icon: Trophy, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
             { label: 'Meus Bolões', value: String(groupsCount || 0), icon: Users, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
           ]);
+
+          // Fetch user guesses for badges
+          const { data: guessesData } = await supabase
+            .from('guesses')
+            .select('points_earned')
+            .eq('profile_id', currentUser.id);
+          if (guessesData) setUserGuesses(guessesData);
+
+          // Fetch user group predictions for badges
+          const { data: groupPreds } = await supabase
+            .from('group_predictions')
+            .select('*')
+            .eq('profile_id', currentUser.id);
+          if (groupPreds) setUserGroupPredictions(groupPreds);
+
+          // Fetch group results for badges
+          const { data: resultsData } = await supabase
+            .from('group_results')
+            .select('*');
+          if (resultsData) setGroupResults(resultsData);
         } else {
           router.push('/login');
           return;
@@ -220,75 +247,48 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Main Feed */}
-          <div className="lg:col-span-2 flex flex-col gap-8">
-            <section>
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 flex items-center gap-3">
-                  PRÓXIMAS PARTIDAS
-                </h2>
-                <Link href="/dashboard/matches" className="text-xs font-bold text-emerald-400 flex items-center gap-2 hover:opacity-80 uppercase tracking-widest">
-                  Ver todos <ChevronRight size={14} />
-                </Link>
-              </div>
-              
-              <div className="flex flex-col gap-4">
-                {upcomingMatches.map((match) => (
-                  <div key={match.id} className="bg-slate-800/40 border border-slate-700/50 p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6 hover:bg-slate-800/60 transition-all group">
-                    <div className="flex items-center gap-2 sm:gap-4 flex-1">
-                      <div className="flex items-center gap-2 min-w-[80px] sm:min-w-[140px]">
-                        <div className="w-6 h-4 sm:w-10 sm:h-6 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner">
-                          <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[8px]">{match.team1.substring(0,3).toUpperCase()}</span>} />
+          <div className="lg:col-span-2 flex flex-col gap-12">
+            {user && <EvolutionChart profileId={user.id} />}
+
+            {user && (
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Minhas Conquistas</h4>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Medalhas virtuais desbloqueadas de acordo com seu desempenho</p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {BADGES_DEFINITION.map(badge => {
+                    const earnedList = calculateUserBadges(userGuesses, rankingPosition, userGroupPredictions, groupResults);
+                    const isEarned = earnedList.includes(badge.id);
+                    return (
+                      <div 
+                        key={badge.id}
+                        className={`glass p-5 rounded-2xl flex flex-col items-center text-center justify-between border transition-all duration-300 relative overflow-hidden ${
+                          isEarned 
+                            ? `${badge.color} shadow-lg ${badge.glowColor} scale-100` 
+                            : 'border-slate-800/80 text-slate-600 opacity-40 grayscale scale-95'
+                        }`}
+                        title={badge.description}
+                      >
+                        <div className="text-3xl mb-3">{badge.icon}</div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-100">{badge.name}</p>
+                          <p className="text-[8px] font-bold text-slate-500 mt-1 line-clamp-2 leading-relaxed">{badge.description}</p>
                         </div>
-                        <span className="font-bold text-xs sm:text-lg truncate">{match.team1}</span>
+                        {!isEarned && (
+                          <div className="absolute top-2 right-2 text-[9px] font-black tracking-widest text-slate-600">🔒</div>
+                        )}
                       </div>
-                      <div className="text-slate-600 font-black text-sm sm:text-xl italic">VS</div>
-                      <div className="flex items-center gap-2 min-w-[80px] sm:min-w-[140px] justify-end text-right">
-                        <span className="font-bold text-xs sm:text-lg truncate">{match.team2}</span>
-                        <div className="w-6 h-4 sm:w-10 sm:h-6 bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner">
-                          <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[8px]">{match.team2.substring(0,3).toUpperCase()}</span>} />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                          {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setHistoryModal({ isOpen: true, teamA: match.team1, teamB: match.team2 })}
-                          className="p-3 text-slate-500 hover:text-emerald-400 transition-colors bg-slate-900/50 rounded-xl"
-                          title="Retrospecto"
-                        >
-                          <History size={16} />
-                        </button>
-                        <Link href="/dashboard/matches" className="px-6 py-3 bg-emerald-500 text-slate-900 text-sm font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 active:scale-95 transition-all shadow-lg shadow-emerald-500/10">
-                          PALPITAR
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
-            </section>
+            )}
           </div>
 
           {/* Sidebar */}
           <div className="flex flex-col gap-8">
-            <section className="bg-gradient-to-br from-emerald-500 to-cyan-600 p-8 rounded-[32px] shadow-xl shadow-emerald-500/10 relative overflow-hidden group">
-              <div className="relative z-10">
-                <h3 className="text-2xl font-black uppercase mb-4 leading-[1.1] text-slate-900">DESAFIE SEUS AMIGOS!</h3>
-                <p className="text-slate-900/70 text-sm font-bold mb-8 uppercase tracking-tight">Crie um bolão privado agora.</p>
-                <Link href="/dashboard/groups" className="w-full py-4 bg-slate-900 text-white font-black uppercase tracking-widest text-sm rounded-2xl flex items-center justify-center gap-2 hover:bg-black active:scale-95 transition-all">
-                  <Users size={18} /> CRIAR BOLÃO
-                </Link>
-              </div>
-              <div className="absolute -right-4 -bottom-4 p-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
-                <Users size={120} />
-              </div>
-            </section>
-
             <section className="glass p-8 rounded-[32px]">
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 mb-8 flex items-center gap-3">
                 RANKING GLOBAL
@@ -306,13 +306,6 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
-
-      <MatchHistoryModal 
-        isOpen={historyModal.isOpen}
-        onClose={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
-        teamA={historyModal.teamA}
-        teamB={historyModal.teamB}
-      />
     </div>
   );
 }

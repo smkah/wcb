@@ -271,5 +271,69 @@ export const adminApi = {
           .eq('id', match.id);
       }
     }
+  },
+
+  async exportAllGuesses() {
+    const { data: guesses, error: guessesError } = await supabase
+      .from('guesses')
+      .select('*');
+    
+    if (guessesError) throw guessesError;
+
+    const { data: groupPredictions, error: groupPredsError } = await supabase
+      .from('group_predictions')
+      .select('*');
+    
+    if (groupPredsError) throw groupPredsError;
+
+    return {
+      guesses: guesses || [],
+      group_predictions: groupPredictions || []
+    };
+  },
+
+  async importGuesses(guesses: any[], groupPredictions: any[]) {
+    // 1. Import regular match guesses
+    if (guesses && guesses.length > 0) {
+      const cleanGuesses = guesses.map(g => ({
+        profile_id: g.profile_id,
+        match_id: g.match_id,
+        score1: g.score1,
+        score2: g.score2,
+        custom_guesses: g.custom_guesses || {},
+        yellow_cards_winner: g.yellow_cards_winner,
+        has_red_card: g.has_red_card
+      }));
+
+      const { error } = await supabase
+        .from('guesses')
+        .upsert(cleanGuesses, { onConflict: 'profile_id,match_id' });
+      
+      if (error) throw error;
+    }
+
+    // 2. Import group classification predictions
+    if (groupPredictions && groupPredictions.length > 0) {
+      const cleanGroupPreds = groupPredictions.map(gp => ({
+        profile_id: gp.profile_id,
+        group_letter: gp.group_letter,
+        first_place: gp.first_place,
+        second_place: gp.second_place,
+        third_place: gp.third_place,
+        third_place_qualified: gp.third_place_qualified || false
+      }));
+
+      const { error } = await supabase
+        .from('group_predictions')
+        .upsert(cleanGroupPreds, { onConflict: 'profile_id,group_letter' });
+      
+      if (error) throw error;
+    }
+
+    // 3. Recalculate points after import
+    const { error: recalcError } = await supabase.rpc('recalculate_all_user_points');
+    if (recalcError) {
+      console.warn("Could not auto-recalculate points on import:", recalcError.message);
+    }
   }
 };

@@ -37,6 +37,7 @@ export default function MatchesPage() {
     isOpen: false,
     match: null
   });
+  const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const checkUserAndFetchData = async () => {
@@ -176,15 +177,92 @@ export default function MatchesPage() {
     return new Date() > deadline;
   };
 
-  // Group matches: by group for group stage, by round for knockout
+  const getPhaseName = (round: string, group?: string) => {
+    const r = round.toLowerCase();
+    if (r.includes('matchday') || group) {
+      return "FASE DE GRUPOS";
+    }
+    if (r.includes('16-avos') || r.includes('32')) {
+      return "16-AVOS DE FINAL";
+    }
+    if (r.includes('oitavas') || r.includes('16')) {
+      return "OITAVAS DE FINAL";
+    }
+    if (r.includes('quartas') || r.includes('quarter')) {
+      return "QUARTAS DE FINAL";
+    }
+    if (r.includes('semifinal') || r.includes('semi')) {
+      return "SEMIFINAIS";
+    }
+    if (r.includes('3º') || r.includes('terceiro') || r.includes('third')) {
+      return "DISPUTA DO 3º LUGAR";
+    }
+    if (r.includes('final')) {
+      return "FINAL";
+    }
+    return round.toUpperCase();
+  };
+
+  const phaseOrder = [
+    "FASE DE GRUPOS",
+    "16-AVOS DE FINAL",
+    "OITAVAS DE FINAL",
+    "QUARTAS DE FINAL",
+    "SEMIFINAIS",
+    "DISPUTA DO 3º LUGAR",
+    "FINAL"
+  ];
+
   const groupedMatches = matches.reduce((acc, match) => {
-    const isGroupStage = match.round.toLowerCase().includes('matchday') || match.group;
-    const groupKey = match.group ? `GRUPO ${match.group}` : match.round.toUpperCase();
-    
-    if (!acc[groupKey]) acc[groupKey] = [];
-    acc[groupKey].push(match);
+    const phase = getPhaseName(match.round, match.group);
+    if (!acc[phase]) acc[phase] = [];
+    acc[phase].push(match);
     return acc;
   }, {} as Record<string, any[]>);
+
+  // Sort matches inside each group
+  Object.keys(groupedMatches).forEach(phase => {
+    if (phase === "FASE DE GRUPOS") {
+      groupedMatches[phase].sort((a, b) => {
+        const groupA = a.group || '';
+        const groupB = b.group || '';
+        if (groupA !== groupB) {
+          return groupA.localeCompare(groupB);
+        }
+        if (a.date !== b.date) {
+          return a.date.localeCompare(b.date);
+        }
+        const timeA = a.time || '';
+        const timeB = b.time || '';
+        return timeA.localeCompare(timeB);
+      });
+    } else {
+      groupedMatches[phase].sort((a, b) => {
+        if (a.date !== b.date) {
+          return a.date.localeCompare(b.date);
+        }
+        const timeA = a.time || '';
+        const timeB = b.time || '';
+        return timeA.localeCompare(timeB);
+      });
+    }
+  });
+
+  const sortedPhases = Object.keys(groupedMatches).sort((a, b) => {
+    const idxA = phaseOrder.indexOf(a);
+    const idxB = phaseOrder.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const togglePhaseCollapse = (phase: string) => {
+    setCollapsedPhases(prev => ({
+      ...prev,
+      [phase]: !prev[phase]
+    }));
+  };
 
   const handleCustomGuessChange = (matchId: string, groupId: string, ruleName: string, value: string) => {
     setGuesses(prev => {
@@ -333,6 +411,158 @@ export default function MatchesPage() {
     }
   };
 
+  const handleAIFillPredictions = async (phaseName: string) => {
+    if (!user) {
+      toast.error("Você precisa estar logado!");
+      return;
+    }
+
+    const toastId = toast.loading(`Processando preenchimento com IA para ${phaseName}...`);
+    try {
+      const roundMatches = groupedMatches[phaseName];
+      if (!roundMatches || roundMatches.length === 0) {
+        throw new Error("Nenhuma partida encontrada nesta fase.");
+      }
+
+      const updatedGuessesMap = { ...guesses };
+      const apiGuessesToUpsert = [];
+
+      for (const match of roundMatches) {
+        const team1 = match.team1;
+        const team2 = match.team2;
+
+        // 1. Calculate H2H history bias
+        const teamSeed = team1.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0) + 
+                         team2.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+        
+        const deterministicScore = (offset: number, max: number) => {
+          return (teamSeed + offset) % max;
+        };
+
+        const h2h = [
+          { s1: deterministicScore(10, 3), s2: deterministicScore(20, 3) },
+          { s1: deterministicScore(30, 3), s2: deterministicScore(45, 3) },
+          { s1: deterministicScore(60, 4), s2: deterministicScore(75, 4) }
+        ];
+
+        let winsA = 0;
+        let winsB = 0;
+        h2h.forEach(h => {
+          if (h.s1 > h.s2) winsA++;
+          else if (h.s2 > h.s1) winsB++;
+        });
+
+        const h2hBias = winsA - winsB;
+
+        // 2. Fetch news sentiment bias
+        let newsBias = 0;
+        try {
+          const res = await fetch(`/api/news?team1=${encodeURIComponent(team1)}&team2=${encodeURIComponent(team2)}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.articles) {
+              json.articles.forEach((art: any) => {
+                const title = art.title.toLowerCase();
+                if (title.includes(team1.toLowerCase()) && (title.includes('favorit') || title.includes('venc') || title.includes('melhor') || title.includes('confianca'))) {
+                  newsBias += 0.5;
+                }
+                if (title.includes(team2.toLowerCase()) && (title.includes('lesa') || title.includes('desfalqu') || title.includes('crise') || title.includes('preocup'))) {
+                  newsBias += 0.5;
+                }
+                if (title.includes(team2.toLowerCase()) && (title.includes('favorit') || title.includes('venc') || title.includes('melhor') || title.includes('confianca'))) {
+                  newsBias -= 0.5;
+                }
+                if (title.includes(team1.toLowerCase()) && (title.includes('lesa') || title.includes('desfalqu') || title.includes('crise') || title.includes('preocup'))) {
+                  newsBias -= 0.5;
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch news for ${team1} vs ${team2}:`, e);
+        }
+
+        // 3. Score Heuristic
+        let score1 = 1;
+        let score2 = 1;
+        const totalBias = h2hBias + newsBias;
+
+        if (totalBias > 0.5) {
+          score1 += Math.round(totalBias);
+          if (totalBias > 1.5) score2 = Math.max(0, score2 - 1);
+        } else if (totalBias < -0.5) {
+          score2 += Math.round(Math.abs(totalBias));
+          if (totalBias < -1.5) score1 = Math.max(0, score1 - 1);
+        }
+
+        const matchSeed = teamSeed % 3;
+        if (matchSeed === 0) {
+          score1 += 1;
+        } else if (matchSeed === 1 && score1 === score2) {
+          if (totalBias >= 0) score1 += 1;
+          else score2 += 1;
+        }
+
+        score1 = Math.max(0, score1);
+        score2 = Math.max(0, score2);
+
+        // Standard details
+        const hasRedCard = (teamSeed % 7) === 0;
+        let yellowCardsWinner = 'Empate';
+        if (teamSeed % 3 === 0) yellowCardsWinner = team1;
+        else if (teamSeed % 3 === 1) yellowCardsWinner = team2;
+
+        // Custom rules
+        const customGuesses: Record<string, string> = {};
+        userGroups.forEach((group: any) => {
+          const rules = Array.isArray(group.custom_rules) 
+            ? group.custom_rules 
+            : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
+          rules.forEach((rule: any) => {
+            const key = `${group.id}_${rule.regra}`;
+            customGuesses[key] = score1 > score2 ? team1 : score2 > score1 ? team2 : 'Empate';
+          });
+        });
+
+        updatedGuessesMap[match.id] = {
+          scoreA: String(score1),
+          scoreB: String(score2),
+          yellowCardsWinner,
+          hasRedCard,
+          custom_guesses: customGuesses
+        };
+
+        apiGuessesToUpsert.push({
+          profile_id: user.id,
+          match_id: match.id,
+          score1,
+          score2,
+          yellow_cards_winner: yellowCardsWinner,
+          has_red_card: hasRedCard,
+          custom_guesses: customGuesses,
+          updated_at: new Date().toISOString()
+        });
+      }
+
+      const { error } = await supabase
+        .from('guesses')
+        .upsert(apiGuessesToUpsert, { onConflict: 'profile_id, match_id' });
+
+      if (error) throw error;
+
+      const { error: recalcError } = await supabase.rpc('recalculate_all_user_points');
+      if (recalcError) {
+        console.error("Recalculate points error:", recalcError);
+      }
+
+      setGuesses(updatedGuessesMap);
+      toast.success(`Palpites da fase ${phaseName} preenchidos com sucesso!`, { id: toastId });
+    } catch (err: any) {
+      console.error("AI Fill failed:", err);
+      toast.error("Erro ao preencher com IA: " + (err.message || "Tente novamente"), { id: toastId });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0F172A] text-slate-100">
       <Navbar />
@@ -403,21 +633,67 @@ export default function MatchesPage() {
 
         {activeSubTab === 'matches' ? (
           <div className="space-y-20">
-            {Object.entries(groupedMatches).map(([round, roundMatches], sectionIdx) => (
-            <motion.section 
-              key={round}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: sectionIdx * 0.1 }}
-            >
-              <div className="flex items-center gap-6 mb-8">
-                <h2 className="text-xl font-black uppercase tracking-tighter text-emerald-400">
-                  {round}
-                </h2>
-                <div className="h-px flex-1 bg-slate-800" />
-              </div>
+            {sortedPhases.map((round, sectionIdx) => {
+              const roundMatches = groupedMatches[round];
+              const isCollapsed = collapsedPhases[round];
+              const totalCount = roundMatches.length;
+              const guessedCount = roundMatches.filter(m => {
+                const g = guesses[m.id];
+                return g && g.scoreA !== '' && g.scoreB !== '';
+              }).length;
 
-              <div className={`grid gap-6 ${
+              return (
+                <motion.section 
+                  key={round}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: sectionIdx * 0.1 }}
+                >
+                  <div 
+                    className="flex items-center gap-6 mb-8 cursor-pointer select-none group"
+                  >
+                    <h2 className="text-xl font-black uppercase tracking-tighter text-emerald-400 flex flex-wrap items-center gap-3" onClick={() => togglePhaseCollapse(round)}>
+                      {round}
+                      <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                        ({guessedCount}/{totalCount} salvos)
+                      </span>
+                    </h2>
+
+                    <div className="flex gap-2 items-center flex-shrink-0">
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAIFillPredictions(round);
+                          }}
+                          className="px-3.5 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 cursor-pointer hover:scale-[1.03] active:scale-95"
+                        >
+                          Preencher IA
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => togglePhaseCollapse(round)}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
+                      >
+                        {isCollapsed ? 'Expandir' : 'Minimizar'}
+                      </button>
+                    </div>
+
+                    <div className="h-px flex-1 bg-slate-800 group-hover:bg-emerald-500/20 transition-colors" onClick={() => togglePhaseCollapse(round)} />
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {!isCollapsed && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className={`grid gap-6 ${
                 viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 
                 viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 
                 'grid-cols-1'
@@ -836,8 +1112,12 @@ export default function MatchesPage() {
                   );
                 })}
               </div>
-            </motion.section>
-          ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.section>
+    );
+  })}
         </div>
         ) : (
           <div className="space-y-12 pb-24">
