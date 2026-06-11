@@ -17,6 +17,7 @@ import { formatMatchDate, formatMatchTime } from '@/lib/utils';
 
 export default function MatchesPage() {
   const [guesses, setGuesses] = useState<Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string> }>>({});
+  const [existingGuesses, setExistingGuesses] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -52,9 +53,9 @@ export default function MatchesPage() {
           .select('*')
           .order('date', { ascending: true })
           .order('time', { ascending: true });
-        
+
         if (matchesError) throw matchesError;
-        
+
         const finalMatches = (matchesData && matchesData.length > 0) ? matchesData : WORLD_CUP_DATA.matches;
         setMatches(finalMatches);
 
@@ -68,12 +69,14 @@ export default function MatchesPage() {
             .from('guesses')
             .select('*')
             .eq('profile_id', user.id);
-          
+
           if (!guessesError && guessesData) {
             const guessesMap: Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string> }> = {};
+            const existingSet = new Set<string>();
             guessesData.forEach(g => {
-              guessesMap[g.match_id] = { 
-                scoreA: String(g.score1), 
+              existingSet.add(g.match_id);
+              guessesMap[g.match_id] = {
+                scoreA: String(g.score1),
                 scoreB: String(g.score2),
                 yellowCardsWinner: g.yellow_cards_winner || '',
                 hasRedCard: g.has_red_card !== null ? g.has_red_card : undefined,
@@ -81,6 +84,7 @@ export default function MatchesPage() {
               };
             });
             setGuesses(guessesMap);
+            setExistingGuesses(existingSet);
           }
 
           // Fetch group predictions
@@ -88,7 +92,7 @@ export default function MatchesPage() {
             .from('group_predictions')
             .select('*')
             .eq('profile_id', user.id);
-          
+
           if (predData) {
             const predMap: Record<string, { firstPlace: string, secondPlace: string, thirdPlace: string, thirdPlaceQualified: boolean }> = {};
             predData.forEach(p => {
@@ -107,7 +111,7 @@ export default function MatchesPage() {
             .from('group_members')
             .select('group_id, groups(id, name, custom_rules)')
             .eq('profile_id', user.id);
-          
+
           if (membersData) {
             setUserGroups(membersData.map((m: any) => m.groups).filter(Boolean));
           }
@@ -297,8 +301,8 @@ export default function MatchesPage() {
     }
 
     const match = matches.find(m => m.id === matchId);
-    if (!isAdmin && match && isMatchStarted(match)) {
-      toast.error("Este jogo já iniciou! Não é mais permitido salvar palpites.");
+    if (!isAdmin && match && (isMatchStarted(match) || (match.score1 !== null && match.score2 !== null))) {
+      toast.error("Este jogo já iniciou ou finalizou! Não é mais permitido salvar palpites.");
       return;
     }
 
@@ -324,8 +328,13 @@ export default function MatchesPage() {
         }, { onConflict: 'profile_id, match_id' });
 
       if (error) throw error;
-      
+
       toast.success("Palpite salvo com sucesso!");
+      setExistingGuesses(prev => {
+        const next = new Set(prev);
+        next.add(matchId);
+        return next;
+      });
       setSaved(matchId);
       setTimeout(() => setSaved(null), 2000);
     } catch (err: any) {
@@ -425,16 +434,16 @@ export default function MatchesPage() {
       }
 
       const updatedGuessesMap = { ...guesses };
-      const apiGuessesToUpsert = [];
+      const apiGuessesToUpsert: any[] = [];
 
       for (const match of roundMatches) {
         const team1 = match.team1;
         const team2 = match.team2;
 
         // 1. Calculate H2H history bias
-        const teamSeed = team1.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0) + 
-                         team2.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-        
+        const teamSeed = team1.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0) +
+          team2.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+
         const deterministicScore = (offset: number, max: number) => {
           return (teamSeed + offset) % max;
         };
@@ -515,8 +524,8 @@ export default function MatchesPage() {
         // Custom rules
         const customGuesses: Record<string, string> = {};
         userGroups.forEach((group: any) => {
-          const rules = Array.isArray(group.custom_rules) 
-            ? group.custom_rules 
+          const rules = Array.isArray(group.custom_rules)
+            ? group.custom_rules
             : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
           rules.forEach((rule: any) => {
             const key = `${group.id}_${rule.regra}`;
@@ -556,6 +565,11 @@ export default function MatchesPage() {
       }
 
       setGuesses(updatedGuessesMap);
+      setExistingGuesses(prev => {
+        const next = new Set(prev);
+        apiGuessesToUpsert.forEach(g => next.add(g.match_id));
+        return next;
+      });
       toast.success(`Palpites da fase ${phaseName} preenchidos com sucesso!`, { id: toastId });
     } catch (err: any) {
       console.error("AI Fill failed:", err);
@@ -567,7 +581,7 @@ export default function MatchesPage() {
     const guess = guesses[match.id] || { scoreA: '', scoreB: '' };
     const isSaving = saving === match.id;
     const isSaved = saved === match.id;
-    const isStarted = !isAdmin && isMatchStarted(match);
+    const isStarted = (isMatchStarted(match) || (match.score1 !== null && match.score2 !== null));
 
     if (viewMode === 'list') {
       return (
@@ -579,9 +593,9 @@ export default function MatchesPage() {
           className="glass p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-emerald-500/30 transition-all"
         >
           <div className="flex items-center gap-4 min-w-[120px]">
-             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/50 px-3 py-1 rounded-md">
-               {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
-             </span>
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/50 px-3 py-1 rounded-md">
+              {formatMatchDate(match.date)} — {formatMatchTime(match.time)}
+            </span>
           </div>
 
           <div className="flex flex-col flex-1 w-full gap-3">
@@ -630,9 +644,9 @@ export default function MatchesPage() {
                   <span className="text-[9px] text-slate-400 font-bold">Mais Amarelos (3 pts)</span>
                   <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
                     {[
-                      { value: match.team1, label: match.team1.substring(0,3).toUpperCase() },
+                      { value: match.team1, label: match.team1.substring(0, 3).toUpperCase() },
                       { value: 'Empate', label: 'EMP' },
-                      { value: match.team2, label: match.team2.substring(0,3).toUpperCase() }
+                      { value: match.team2, label: match.team2.substring(0, 3).toUpperCase() }
                     ].map((opt, optIdx) => (
                       <button
                         key={`${opt.value}-${optIdx}`}
@@ -647,11 +661,10 @@ export default function MatchesPage() {
                             }
                           }));
                         }}
-                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
-                          guess.yellowCardsWinner === opt.value
+                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${guess.yellowCardsWinner === opt.value
                             ? 'bg-amber-500 text-slate-900 shadow'
                             : 'text-slate-500 hover:text-slate-300'
-                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                          } disabled:opacity-40 disabled:cursor-not-allowed`}
                       >
                         {opt.label}
                       </button>
@@ -680,11 +693,10 @@ export default function MatchesPage() {
                             }
                           }));
                         }}
-                        className={`px-2.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
-                          guess.hasRedCard === opt.value
+                        className={`px-2.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${guess.hasRedCard === opt.value
                             ? 'bg-emerald-500 text-slate-900 shadow'
                             : 'text-slate-500 hover:text-slate-300'
-                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                          } disabled:opacity-40 disabled:cursor-not-allowed`}
                       >
                         {opt.label}
                       </button>
@@ -700,8 +712,8 @@ export default function MatchesPage() {
                 <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Regras Personalizadas</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                   {userGroups.map((group: any) => {
-                    const rules = Array.isArray(group.custom_rules) 
-                      ? group.custom_rules 
+                    const rules = Array.isArray(group.custom_rules)
+                      ? group.custom_rules
                       : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
                     if (rules.length === 0) return null;
                     return rules.map((rule: any) => {
@@ -752,9 +764,9 @@ export default function MatchesPage() {
             <button
               onClick={() => handleSaveGuess(match.id)}
               disabled={!guess.scoreA || !guess.scoreB || isSaving || isStarted}
-              className={`p-2.5 rounded-xl transition-all ${
-                isSaved ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-emerald-400 bg-slate-900/50 hover:bg-emerald-400/10 disabled:opacity-30'
-              }`}
+              className={`p-2.5 rounded-xl transition-all ${isSaved ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-emerald-400 bg-slate-900/50 hover:bg-emerald-400/10 disabled:opacity-30'
+                }`}
+              title={existingGuesses.has(match.id) ? 'Atualizar Palpite' : 'Salvar Palpite'}
             >
               {isSaving ? <Loader2 size={18} className="animate-spin" /> : isSaved ? <CheckCircle2 size={18} /> : <Save size={18} />}
             </button>
@@ -797,7 +809,7 @@ export default function MatchesPage() {
         <div className={`flex items-center justify-between gap-4 ${viewMode === 'compact' ? 'mb-6' : 'mb-10'}`}>
           <div className="flex flex-col items-center gap-3 flex-1 text-center">
             <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
-              <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team1.substring(0,3).toUpperCase()}</span>} />
+              <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team1.substring(0, 3).toUpperCase()}</span>} />
             </div>
             <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team1}</span>
           </div>
@@ -826,7 +838,7 @@ export default function MatchesPage() {
 
           <div className="flex flex-col items-center gap-3 flex-1 text-center">
             <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
-              <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team2.substring(0,3).toUpperCase()}</span>} />
+              <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" fallback={<span className="font-bold text-[10px]">{match.team2.substring(0, 3).toUpperCase()}</span>} />
             </div>
             <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team2}</span>
           </div>
@@ -835,7 +847,7 @@ export default function MatchesPage() {
         {/* Standard card rules (Yellow / Red cards) in Grid/Compact Mode */}
         <div className="mb-6 p-4 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-3">
           <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Cartões do Jogo</p>
-          
+
           <div className="flex flex-col gap-2.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Mais Cartões Amarelos (3 pts)</span>
@@ -858,11 +870,10 @@ export default function MatchesPage() {
                         }
                       }));
                     }}
-                    className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center truncate max-w-[120px] ${
-                      guess.yellowCardsWinner === opt.value
+                    className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center truncate max-w-[120px] ${guess.yellowCardsWinner === opt.value
                         ? 'bg-amber-500 text-slate-900 shadow-md shadow-amber-500/10'
                         : 'text-slate-500 hover:text-slate-300'
-                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
                     {opt.label}
                   </button>
@@ -890,11 +901,10 @@ export default function MatchesPage() {
                         }
                       }));
                     }}
-                    className={`px-4 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center ${
-                      guess.hasRedCard === opt.value
+                    className={`px-4 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center ${guess.hasRedCard === opt.value
                         ? 'bg-emerald-500 text-slate-900 shadow-md shadow-emerald-500/10'
                         : 'text-slate-500 hover:text-slate-300'
-                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
                     {opt.label}
                   </button>
@@ -910,8 +920,8 @@ export default function MatchesPage() {
             <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Regras do Bolão</p>
             <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
               {userGroups.map((group: any) => {
-                const rules = Array.isArray(group.custom_rules) 
-                  ? group.custom_rules 
+                const rules = Array.isArray(group.custom_rules)
+                  ? group.custom_rules
                   : Object.entries(group.custom_rules || {}).map(([k, v]) => ({ regra: k, resposta: '', pontos: Number(v) }));
                 if (rules.length === 0) return null;
                 return (
@@ -960,16 +970,14 @@ export default function MatchesPage() {
             <button
               onClick={() => handleSaveGuess(match.id)}
               disabled={!guess.scoreA || !guess.scoreB || isSaving || isStarted}
-              className={`flex items-center justify-center gap-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all w-full sm:w-auto shadow-lg shadow-emerald-500/20 ${
-                viewMode === 'compact' ? 'px-4 py-2' : 'px-8 py-3'
-              } ${
-                isSaved 
-                  ? 'bg-emerald-500 text-slate-900' 
+              className={`flex items-center justify-center gap-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all w-full sm:w-auto shadow-lg shadow-emerald-500/20 ${viewMode === 'compact' ? 'px-4 py-2' : 'px-8 py-3'
+                } ${isSaved
+                  ? 'bg-emerald-500 text-slate-900'
                   : 'bg-emerald-500 hover:bg-emerald-400 text-slate-900 disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none'
-              }`}
+                }`}
             >
               {isSaving ? <Loader2 size={14} className="animate-spin" /> : isSaved ? <CheckCircle2 size={14} /> : <Save size={14} />}
-              {isSaved ? 'SALVO' : viewMode === 'compact' ? 'SALVAR' : 'SALVAR PALPITE'}
+              {isSaved ? 'SALVO' : existingGuesses.has(match.id) ? (viewMode === 'compact' ? 'ATUALIZAR' : 'ATUALIZAR PALPITE') : (viewMode === 'compact' ? 'SALVAR' : 'SALVAR PALPITE')}
             </button>
           </div>
         </div>
@@ -988,344 +996,339 @@ export default function MatchesPage() {
         </div>
       ) : (
         <main className="max-w-7xl mx-auto p-4 md:p-12">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.3em] text-emerald-400 mb-2">Calendário Oficial</p>
-            <h1 className="text-5xl md:text-6xl font-black uppercase tracking-tighter flex items-center gap-4">
-              PARTIDAS
-            </h1>
-          </div>
-          
-          <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
-            <button 
-              onClick={() => setViewMode('grid')}
-              className={`p-3 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-slate-300'}`}
-              title="Grade"
-            >
-              <LayoutGrid size={20} />
-            </button>
-            <button 
-              onClick={() => setViewMode('compact')}
-              className={`p-3 rounded-xl transition-all ${viewMode === 'compact' ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-slate-300'}`}
-              title="Compacto"
-            >
-              <LayoutList size={20} />
-            </button>
-            <button 
-              onClick={() => setViewMode('list')}
-              className={`p-3 rounded-xl transition-all ${viewMode === 'list' ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-slate-300'}`}
-              title="Lista"
-            >
-              <ListIcon size={20} />
-            </button>
-          </div>
-        </header>
-
-        {/* Sub-tab switcher */}
-        <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 mb-12 max-w-md">
-          <button
-            onClick={() => setActiveSubTab('matches')}
-            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${
-              activeSubTab === 'matches'
-                ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            Partidas
-          </button>
-          <button
-            onClick={() => setActiveSubTab('standings')}
-            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${
-              activeSubTab === 'standings'
-                ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            Fase de Grupos (Classificação)
-          </button>
-        </div>
-
-        {activeSubTab === 'matches' ? (
-          <div className="space-y-20">
-            {sortedPhases.map((round, sectionIdx) => {
-              const roundMatches = groupedMatches[round];
-              const isCollapsed = collapsedPhases[round];
-              const totalCount = roundMatches.length;
-              const guessedCount = roundMatches.filter((m: any) => {
-                const g = guesses[m.id];
-                return g && g.scoreA !== '' && g.scoreB !== '';
-              }).length;
-
-              return (
-                <motion.section 
-                  key={round}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: sectionIdx * 0.1 }}
-                >
-                  <div 
-                    className="flex items-center gap-6 mb-8 cursor-pointer select-none group"
-                  >
-                    <h2 className="text-xl font-black uppercase tracking-tighter text-emerald-400 flex flex-wrap items-center gap-3" onClick={() => togglePhaseCollapse(round)}>
-                      {round}
-                      <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-                        ({guessedCount}/{totalCount} salvos)
-                      </span>
-                    </h2>
-
-                    <div className="flex gap-2 items-center flex-shrink-0">
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAIFillPredictions(round);
-                          }}
-                          className="px-3.5 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 cursor-pointer hover:scale-[1.03] active:scale-95"
-                        >
-                          Preencher IA
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => togglePhaseCollapse(round)}
-                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
-                      >
-                        {isCollapsed ? 'Expandir' : 'Minimizar'}
-                      </button>
-                    </div>
-
-                    <div className="h-px flex-1 bg-slate-800 group-hover:bg-emerald-500/20 transition-colors" onClick={() => togglePhaseCollapse(round)} />
-                  </div>
-
-                  <AnimatePresence initial={false}>
-                    {!isCollapsed && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                                {round === "FASE DE GRUPOS" ? (
-                          (() => {
-                            const groupsMap: Record<string, any[]> = {};
-                            (roundMatches as any[]).forEach(match => {
-                              const letter = match.group || 'Outros';
-                              if (!groupsMap[letter]) groupsMap[letter] = [];
-                              groupsMap[letter].push(match);
-                            });
-                            const sortedGroupLetters = Object.keys(groupsMap).sort();
-                            return (
-                              <div className="space-y-16">
-                                {sortedGroupLetters.map((groupLetter) => {
-                                  const groupMatchesList = groupsMap[groupLetter];
-                                  return (
-                                    <div key={groupLetter} className="space-y-6">
-                                      <div className="flex items-center gap-4">
-                                        <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-black uppercase tracking-widest rounded-xl">
-                                          GRUPO {groupLetter.toUpperCase()}
-                                        </span>
-                                        <div className="h-px flex-1 bg-slate-800/40" />
-                                      </div>
-                                      <div className={`grid gap-6 ${
-                                        viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 
-                                        viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 
-                                        'grid-cols-1'
-                                      }`}>
-                                        {groupMatchesList.map((match, i) => renderMatchCard(match, i))}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })()
-                        ) : (
-                          <div className={`grid gap-6 ${
-                            viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' : 
-                            viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 
-                            'grid-cols-1'
-                          }`}>
-                            {(roundMatches as any[]).map((match, i) => renderMatchCard(match, i))}
-                          </div>
-                        )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.section>
-    );
-  })}
-        </div>
-        ) : (
-          <div className="space-y-12 pb-24">
-            <div className="glass p-8 rounded-[32px] border-emerald-500/10">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-black uppercase tracking-tight text-white">Palpite de Classificação dos Grupos</h2>
-                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Selecione o 1º, 2º e 3º colocados de cada grupo (A a L).</p>
-                </div>
-                <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl text-center min-w-[200px]">
-                  <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Melhores Terceiros Selecionados</p>
-                  <p className={`text-2xl font-black mt-1 ${totalQualifiedThirds === 8 ? 'text-emerald-400' : 'text-amber-500'}`}>
-                    {totalQualifiedThirds} <span className="text-slate-600 text-sm">/ 8</span>
-                  </p>
-                </div>
-              </div>
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-emerald-400 mb-2">Calendário Oficial</p>
+              <h1 className="text-5xl md:text-6xl font-black uppercase tracking-tighter flex items-center gap-4">
+                PARTIDAS
+              </h1>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(groupLetter => {
-                const groupTeams = getTeamsByGroup(groupLetter);
-                const pred = groupPredictions[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false };
-                const actual = groupResults.find(r => r.group_letter === groupLetter);
-                const isSaving = savingGroup === groupLetter;
-                const isGroupLocked = !isAdmin && isGroupPredictionsLocked();
+            <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-3 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                title="Grade"
+              >
+                <LayoutGrid size={20} />
+              </button>
+              <button
+                onClick={() => setViewMode('compact')}
+                className={`p-3 rounded-xl transition-all ${viewMode === 'compact' ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                title="Compacto"
+              >
+                <LayoutList size={20} />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-3 rounded-xl transition-all ${viewMode === 'list' ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-slate-300'}`}
+                title="Lista"
+              >
+                <ListIcon size={20} />
+              </button>
+            </div>
+          </header>
+
+          {/* Sub-tab switcher */}
+          <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 mb-12 max-w-md">
+            <button
+              onClick={() => setActiveSubTab('matches')}
+              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'matches'
+                  ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                  : 'text-slate-500 hover:text-slate-300'
+                }`}
+            >
+              Partidas
+            </button>
+            <button
+              onClick={() => setActiveSubTab('standings')}
+              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'standings'
+                  ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                  : 'text-slate-500 hover:text-slate-300'
+                }`}
+            >
+              Fase de Grupos (Classificação)
+            </button>
+          </div>
+
+          {activeSubTab === 'matches' ? (
+            <div className="space-y-20">
+              {sortedPhases.map((round, sectionIdx) => {
+                const roundMatches = groupedMatches[round];
+                const isCollapsed = collapsedPhases[round];
+                const totalCount = roundMatches.length;
+                const guessedCount = roundMatches.filter((m: any) => {
+                  const g = guesses[m.id];
+                  return g && g.scoreA !== '' && g.scoreB !== '';
+                }).length;
 
                 return (
-                  <motion.div
-                    key={groupLetter}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="glass p-6 rounded-[28px] border border-slate-800 hover:border-emerald-500/15 transition-all flex flex-col justify-between"
+                  <motion.section
+                    key={round}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: sectionIdx * 0.1 }}
                   >
-                    <div>
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800/80">
-                        <h3 className="text-xl font-black text-white">GRUPO {groupLetter}</h3>
-                        {actual && actual.first_place && (
-                          <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-950 px-2 py-0.5 rounded border border-slate-900">
-                            Fase Finalizada
-                          </span>
+                    <div
+                      className="flex items-center gap-6 mb-8 cursor-pointer select-none group"
+                    >
+                      <h2 className="text-xl font-black uppercase tracking-tighter text-emerald-400 flex flex-wrap items-center gap-3" onClick={() => togglePhaseCollapse(round)}>
+                        {round}
+                        <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                          ({guessedCount}/{totalCount} salvos)
+                        </span>
+                      </h2>
+
+                      <div className="flex gap-2 items-center flex-shrink-0">
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAIFillPredictions(round);
+                            }}
+                            className="px-3.5 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 cursor-pointer hover:scale-[1.03] active:scale-95"
+                          >
+                            Preencher IA
+                          </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => togglePhaseCollapse(round)}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
+                        >
+                          {isCollapsed ? 'Expandir' : 'Minimizar'}
+                        </button>
                       </div>
 
-                      <div className="space-y-4">
-                        {/* 1º Lugar */}
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">1º Colocado (3 pts)</label>
-                          <select
-                            value={pred.firstPlace}
-                            disabled={isGroupLocked}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setGroupPredictions(prev => ({
-                                ...prev,
-                                [groupLetter]: {
-                                  ...prev[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false },
-                                  firstPlace: val
-                                }
-                              }));
-                            }}
-                            className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <option value="">Selecionar...</option>
-                            {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                        </div>
-
-                        {/* 2º Lugar */}
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">2º Colocado (2 pts)</label>
-                          <select
-                            value={pred.secondPlace}
-                            disabled={isGroupLocked}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setGroupPredictions(prev => ({
-                                ...prev,
-                                [groupLetter]: {
-                                  ...prev[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false },
-                                  secondPlace: val
-                                }
-                              }));
-                            }}
-                            className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <option value="">Selecionar...</option>
-                            {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                        </div>
-
-                        {/* 3º Lugar */}
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">3º Colocado (1 pt se classificar)</label>
-                          <select
-                            value={pred.thirdPlace}
-                            disabled={isGroupLocked}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setGroupPredictions(prev => ({
-                                ...prev,
-                                [groupLetter]: {
-                                  ...prev[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false },
-                                  thirdPlace: val
-                                }
-                              }));
-                            }}
-                            className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <option value="">Selecionar...</option>
-                            {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                        </div>
-
-                        {/* Melhor Terceiro Qualificado Switch */}
-                        {pred.thirdPlace && (
-                          <div className="flex items-center justify-between p-3 bg-slate-950/40 rounded-2xl border border-slate-900 mt-2">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">Qualifica como melhor 3º?</span>
-                            <button
-                              type="button"
-                              disabled={isGroupLocked}
-                              onClick={() => handleThirdPlaceQualifiedToggle(groupLetter)}
-                              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
-                                pred.thirdPlaceQualified
-                                  ? 'bg-amber-500 text-slate-900 shadow-md shadow-amber-500/10'
-                                  : 'bg-slate-900 text-slate-600 hover:text-slate-400'
-                              } disabled:opacity-40 disabled:cursor-not-allowed`}
-                            >
-                              {pred.thirdPlaceQualified ? 'Sim (Qualifica)' : 'Não'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Display actual results if present */}
-                      {actual && actual.first_place && (
-                        <div className="mt-4 p-3 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 space-y-1">
-                          <p className="text-[8px] font-black uppercase text-emerald-400 tracking-widest">Resultado Real</p>
-                          <p className="text-[9px] font-bold text-slate-300">
-                            1º: {actual.first_place} <br/> 2º: {actual.second_place} <br/> 3º: {actual.third_place} 
-                            {actual.third_place_qualified ? ' (Classificado)' : ' (Eliminado)'}
-                          </p>
-                        </div>
-                      )}
+                      <div className="h-px flex-1 bg-slate-800 group-hover:bg-emerald-500/20 transition-colors" onClick={() => togglePhaseCollapse(round)} />
                     </div>
 
-                    <button
-                      onClick={() => handleSaveGroupPrediction(groupLetter)}
-                      disabled={!pred.firstPlace || !pred.secondPlace || !pred.thirdPlace || isSaving || isGroupLocked}
-                      className="w-full mt-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none flex items-center justify-center gap-2"
-                    >
-                      {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                      Salvar Grupo {groupLetter}
-                    </button>
-                  </motion.div>
+                    <AnimatePresence initial={false}>
+                      {!isCollapsed && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          {round === "FASE DE GRUPOS" ? (
+                            (() => {
+                              const groupsMap: Record<string, any[]> = {};
+                              (roundMatches as any[]).forEach(match => {
+                                const letter = match.group || 'Outros';
+                                if (!groupsMap[letter]) groupsMap[letter] = [];
+                                groupsMap[letter].push(match);
+                              });
+                              const sortedGroupLetters = Object.keys(groupsMap).sort();
+                              return (
+                                <div className="space-y-16">
+                                  {sortedGroupLetters.map((groupLetter) => {
+                                    const groupMatchesList = groupsMap[groupLetter];
+                                    return (
+                                      <div key={groupLetter} className="space-y-6">
+                                        <div className="flex items-center gap-4">
+                                          <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-black uppercase tracking-widest rounded-xl">
+                                            GRUPO {groupLetter.toUpperCase()}
+                                          </span>
+                                          <div className="h-px flex-1 bg-slate-800/40" />
+                                        </div>
+                                        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' :
+                                            viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                                              'grid-cols-1'
+                                          }`}>
+                                          {groupMatchesList.map((match, i) => renderMatchCard(match, i))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' :
+                                viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                                  'grid-cols-1'
+                              }`}>
+                              {(roundMatches as any[]).map((match, i) => renderMatchCard(match, i))}
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.section>
                 );
               })}
             </div>
-          </div>
-        )}
-      </main>
+          ) : (
+            <div className="space-y-12 pb-24">
+              <div className="glass p-8 rounded-[32px] border-emerald-500/10">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-black uppercase tracking-tight text-white">Palpite de Classificação dos Grupos</h2>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Selecione o 1º, 2º e 3º colocados de cada grupo (A a L).</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl text-center min-w-[200px]">
+                    <p className="text-[8px] font-black uppercase text-slate-500 tracking-wider">Melhores Terceiros Selecionados</p>
+                    <p className={`text-2xl font-black mt-1 ${totalQualifiedThirds === 8 ? 'text-emerald-400' : 'text-amber-500'}`}>
+                      {totalQualifiedThirds} <span className="text-slate-600 text-sm">/ 8</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(groupLetter => {
+                  const groupTeams = getTeamsByGroup(groupLetter);
+                  const pred = groupPredictions[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false };
+                  const actual = groupResults.find(r => r.group_letter === groupLetter);
+                  const isSaving = savingGroup === groupLetter;
+                  const isGroupLocked = !isAdmin && isGroupPredictionsLocked();
+
+                  return (
+                    <motion.div
+                      key={groupLetter}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="glass p-6 rounded-[28px] border border-slate-800 hover:border-emerald-500/15 transition-all flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800/80">
+                          <h3 className="text-xl font-black text-white">GRUPO {groupLetter}</h3>
+                          {actual && actual.first_place && (
+                            <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-950 px-2 py-0.5 rounded border border-slate-900">
+                              Fase Finalizada
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-4">
+                          {/* 1º Lugar */}
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">1º Colocado (3 pts)</label>
+                            <select
+                              value={pred.firstPlace}
+                              disabled={isGroupLocked}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setGroupPredictions(prev => ({
+                                  ...prev,
+                                  [groupLetter]: {
+                                    ...prev[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false },
+                                    firstPlace: val
+                                  }
+                                }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <option value="">Selecionar...</option>
+                              {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+
+                          {/* 2º Lugar */}
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">2º Colocado (2 pts)</label>
+                            <select
+                              value={pred.secondPlace}
+                              disabled={isGroupLocked}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setGroupPredictions(prev => ({
+                                  ...prev,
+                                  [groupLetter]: {
+                                    ...prev[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false },
+                                    secondPlace: val
+                                  }
+                                }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <option value="">Selecionar...</option>
+                              {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+
+                          {/* 3º Lugar */}
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">3º Colocado (1 pt se classificar)</label>
+                            <select
+                              value={pred.thirdPlace}
+                              disabled={isGroupLocked}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setGroupPredictions(prev => ({
+                                  ...prev,
+                                  [groupLetter]: {
+                                    ...prev[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false },
+                                    thirdPlace: val
+                                  }
+                                }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <option value="">Selecionar...</option>
+                              {groupTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+
+                          {/* Melhor Terceiro Qualificado Switch */}
+                          {pred.thirdPlace && (
+                            <div className="flex items-center justify-between p-3 bg-slate-950/40 rounded-2xl border border-slate-900 mt-2">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Qualifica como melhor 3º?</span>
+                              <button
+                                type="button"
+                                disabled={isGroupLocked}
+                                onClick={() => handleThirdPlaceQualifiedToggle(groupLetter)}
+                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${pred.thirdPlaceQualified
+                                    ? 'bg-amber-500 text-slate-900 shadow-md shadow-amber-500/10'
+                                    : 'bg-slate-900 text-slate-600 hover:text-slate-400'
+                                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                              >
+                                {pred.thirdPlaceQualified ? 'Sim (Qualifica)' : 'Não'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Display actual results if present */}
+                        {actual && actual.first_place && (
+                          <div className="mt-4 p-3 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 space-y-1">
+                            <p className="text-[8px] font-black uppercase text-emerald-400 tracking-widest">Resultado Real</p>
+                            <p className="text-[9px] font-bold text-slate-300">
+                              1º: {actual.first_place} <br /> 2º: {actual.second_place} <br /> 3º: {actual.third_place}
+                              {actual.third_place_qualified ? ' (Classificado)' : ' (Eliminado)'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleSaveGroupPrediction(groupLetter)}
+                        disabled={!pred.firstPlace || !pred.secondPlace || !pred.thirdPlace || isSaving || isGroupLocked}
+                        className="w-full mt-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none flex items-center justify-center gap-2"
+                      >
+                        {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                        Salvar Grupo {groupLetter}
+                      </button>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </main>
       )}
 
-      <MatchHistoryModal 
+      <MatchHistoryModal
         isOpen={historyModal.isOpen}
         onClose={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
         teamA={historyModal.teamA}
         teamB={historyModal.teamB}
       />
 
-      <MatchStatsModal 
+      <MatchStatsModal
         isOpen={statsModal.isOpen}
         onClose={() => setStatsModal(prev => ({ ...prev, isOpen: false }))}
         match={statsModal.match}

@@ -37,7 +37,7 @@ export const COUNTRY_CODES: Record<string, string> = {
   'Norway': 'NO', 'Noruega': 'NO',
   'Argentina': 'AR',
   'Algeria': 'DZ', 'Argélia': 'DZ',
-  'Austria': 'AT',
+  'Austria': 'AT', 'Áustria': 'AT',
   'Jordan': 'JO', 'Jordânia': 'JO',
   'Portugal': 'PT',
   'DR Congo': 'CD', 'RD Congo': 'CD',

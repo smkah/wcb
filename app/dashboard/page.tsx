@@ -4,12 +4,13 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { motion } from 'motion/react';
-import { AlertTriangle, Trophy, Users, Star, ArrowUpRight, Calendar, ChevronRight, History } from 'lucide-react';
+import { AlertTriangle, Trophy, Users, Star, ArrowUpRight, Calendar, ChevronRight, History, Lock, Check, Loader2, CheckCircle2, Save, Target, Percent, Award } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Flag from 'react-world-flags';
 import MatchHistoryModal from '@/components/MatchHistoryModal';
+import { toast } from 'sonner';
 
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
@@ -24,10 +25,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState([
     { label: 'Pontos Totais', value: '0', icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
-    { label: 'Ranking Global', value: '-', icon: Trophy, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-    { label: 'Meus Bolões', value: '0', icon: Users, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
+    { label: 'Pontos de Hoje', value: '0 pts', icon: Calendar, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'Posição no Ranking', value: '-', icon: Trophy, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
   ]);
-  const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
   const [profileName, setProfileName] = useState<string>('');
   const [pendingReminderMatches, setPendingReminderMatches] = useState<any[]>([]);
   const [historyModal, setHistoryModal] = useState<{ isOpen: boolean; teamA: string; teamB: string }>({
@@ -39,6 +39,23 @@ export default function Dashboard() {
   const [userGroupPredictions, setUserGroupPredictions] = useState<any[]>([]);
   const [groupResults, setGroupResults] = useState<any[]>([]);
   const [rankingPosition, setRankingPosition] = useState<number | undefined>(undefined);
+  const [todayPoints, setTodayPoints] = useState<number>(0);
+  const [top3Profiles, setTop3Profiles] = useState<any[]>([]);
+  const [next3DaysMatches, setNext3DaysMatches] = useState<any[]>([]);
+  
+  // Premium widgets state
+  const [nextMatch, setNextMatch] = useState<any | null>(null);
+  const [nextMatchGuess, setNextMatchGuess] = useState<any | null>(null);
+  const [savingNextMatch, setSavingNextMatch] = useState(false);
+  const [savedNextMatch, setSavedNextMatch] = useState(false);
+  const [accuracyStats, setAccuracyStats] = useState<{
+    total: number;
+    exact: number;
+    outcome: number;
+    errors: number;
+    rate: number;
+  }>({ total: 0, exact: 0, outcome: 0, errors: 0, rate: 0 });
+  const [recentHistory, setRecentHistory] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,6 +63,9 @@ export default function Dashboard() {
       setLoading(true);
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
+        let loadedGuesses: any[] = [];
+        let loadedMatches: any[] = [];
+
         if (currentUser) {
           setUser(currentUser);
           
@@ -56,29 +76,41 @@ export default function Dashboard() {
             .eq('id', currentUser.id)
             .single();
 
+          let computedRank = 1;
           if (profile) {
             setProfileName(profile.full_name || currentUser.email?.split('@')[0] || '');
-            setRankingPosition(profile.ranking_position || undefined);
+            
+            // Fetch rank position dynamically based on points
+            const { count: rankCount } = await supabase
+              .from('profiles')
+              .select('*', { count: 'exact', head: true })
+              .gt('points', profile.points || 0);
+
+            computedRank = rankCount !== null ? rankCount + 1 : 1;
+            setRankingPosition(computedRank);
           }
-          
-          // Fetch groups count
-          const { count: groupsCount } = await supabase
-            .from('group_members')
-            .select('*', { count: 'exact', head: true })
-            .eq('profile_id', currentUser.id);
 
-          setStats([
-            { label: 'Pontos Totais', value: String(profile?.points || 0), icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
-            { label: 'Ranking Global', value: profile?.ranking_position ? `${profile.ranking_position}º` : '-', icon: Trophy, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-            { label: 'Meus Bolões', value: String(groupsCount || 0), icon: Users, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
-          ]);
-
-          // Fetch user guesses for badges
+          // Fetch user guesses for badges, points, and stats calculation
           const { data: guessesData } = await supabase
             .from('guesses')
-            .select('points_earned')
+            .select('id, match_id, score1, score2, points_earned, yellow_cards_winner, has_red_card')
             .eq('profile_id', currentUser.id);
-          if (guessesData) setUserGuesses(guessesData);
+          
+          if (guessesData) {
+            loadedGuesses = guessesData;
+            setUserGuesses(guessesData);
+          }
+
+          // Fetch top 3 ranking profiles
+          const { data: top3Data } = await supabase
+            .from('profiles')
+            .select('id, full_name, points, avatar_url, username')
+            .order('points', { ascending: false })
+            .limit(3);
+          
+          if (top3Data) {
+            setTop3Profiles(top3Data);
+          }
 
           // Fetch user group predictions for badges
           const { data: groupPreds } = await supabase
@@ -92,6 +124,13 @@ export default function Dashboard() {
             .from('group_results')
             .select('*');
           if (resultsData) setGroupResults(resultsData);
+
+          // Update initial stats
+          setStats([
+            { label: 'Pontos Totais', value: String(profile?.points || 0), icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
+            { label: 'Pontos de Hoje', value: '0 pts', icon: Calendar, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+            { label: 'Posição no Ranking', value: `${computedRank}º`, icon: Trophy, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
+          ]);
         } else {
           router.push('/login');
           return;
@@ -101,45 +140,200 @@ export default function Dashboard() {
         const { data: matches } = await supabase
           .from('matches')
           .select('*')
-          .order('date', { ascending: true });
+          .order('date', { ascending: true })
+          .order('time', { ascending: true });
         
         if (matches && matches.length > 0) {
-          setUpcomingMatches(matches.slice(0, 3));
-          
-          // Filter matches starting within the next 2 hours that the user hasn't predicted yet
-          if (currentUser) {
-            const { data: userGuesses } = await supabase
-              .from('guesses')
-              .select('match_id')
-              .eq('profile_id', currentUser.id);
-
-            const guessedMatchIds = new Set((userGuesses || []).map((g: any) => g.match_id));
-            const now = new Date();
-            const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-            
-            const pending = matches.filter((match: any) => {
-              if (guessedMatchIds.has(match.id)) return false;
-              
-              const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-              const matchDateTime = new Date(`${match.date}T${timePart}`);
-              
-              return matchDateTime > now && matchDateTime <= twoHoursFromNow;
-            });
-            
-            setPendingReminderMatches(pending);
-          }
+          loadedMatches = matches;
         } else {
-          setUpcomingMatches(WORLD_CUP_DATA.matches.slice(0, 3));
+          loadedMatches = WORLD_CUP_DATA.matches;
+        }
+
+        // Filter matches for the next 3 days (Today, Tomorrow, Day After)
+        const localDate = new Date();
+        const dateStrings: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          const d = new Date();
+          d.setDate(localDate.getDate() + i);
+          dateStrings.push(d.toLocaleDateString('en-CA')); // YYYY-MM-DD
+        }
+        
+        const next3Days = loadedMatches.filter((m: any) => dateStrings.includes(m.date));
+        setNext3DaysMatches(next3Days);
+
+        // Calculate points won today
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        const todayGuesses = loadedGuesses.filter(g => {
+          const m = loadedMatches.find(match => match.id === g.match_id);
+          return m && m.date === todayStr;
+        });
+        const todayPts = todayGuesses.reduce((acc, curr) => acc + (curr.points_earned || 0), 0);
+        setTodayPoints(todayPts);
+
+        // Update today's points in the stats grid
+        setStats(prev => prev.map(s => s.label === 'Pontos de Hoje' ? { ...s, value: `+${todayPts} pts` } : s));
+
+        // Filter matches starting within the next 2 hours that the user hasn't predicted yet
+        if (currentUser && loadedMatches.length > 0) {
+          const guessedMatchIds = new Set((loadedGuesses || []).map((g: any) => g.match_id));
+          const now = new Date();
+          const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+          
+          const pending = loadedMatches.filter((match: any) => {
+            if (guessedMatchIds.has(match.id)) return false;
+            
+            const timePart = match.time ? match.time.split(' ')[0] : '00:00';
+            const matchDateTime = new Date(`${match.date}T${timePart}`);
+            
+            return matchDateTime > now && matchDateTime <= twoHoursFromNow;
+          });
+          
+          setPendingReminderMatches(pending);
+
+          // Find the next upcoming match chronologically
+          const futureMatches = loadedMatches.filter((match: any) => {
+            const timePart = match.time ? match.time.split(' ')[0] : '00:00';
+            const matchDateTime = new Date(`${match.date}T${timePart}`);
+            return matchDateTime > now;
+          });
+          const nextM = futureMatches[0] || null;
+          setNextMatch(nextM);
+
+          if (nextM) {
+            const existingG = loadedGuesses.find(g => g.match_id === nextM.id);
+            if (existingG) {
+              setNextMatchGuess({
+                score1: String(existingG.score1 ?? ''),
+                score2: String(existingG.score2 ?? ''),
+                yellow_cards_winner: existingG.yellow_cards_winner || '',
+                has_red_card: existingG.has_red_card
+              });
+            } else {
+              setNextMatchGuess({ score1: '', score2: '', yellow_cards_winner: '', has_red_card: null });
+            }
+          }
+
+          // Calculate Accuracy Stats
+          const finishedGuessed = loadedGuesses.filter(g => {
+            const m = loadedMatches.find(x => x.id === g.match_id);
+            return m && m.score1 !== null && m.score2 !== null;
+          });
+
+          let exactCount = 0;
+          let outcomeCount = 0;
+          let errorsCount = 0;
+
+          finishedGuessed.forEach(g => {
+            const m = loadedMatches.find(x => x.id === g.match_id);
+            if (m) {
+              const exactMatch = m.score1 === g.score1 && m.score2 === g.score2;
+              const sameOutcome = Math.sign(m.score1 - m.score2) === Math.sign(g.score1 - g.score2);
+              if (exactMatch) {
+                exactCount++;
+              } else if (sameOutcome) {
+                outcomeCount++;
+              } else {
+                errorsCount++;
+              }
+            }
+          });
+
+          const totalFinished = finishedGuessed.length;
+          const rate = totalFinished > 0 ? Math.round(((exactCount + outcomeCount) / totalFinished) * 100) : 0;
+          setAccuracyStats({
+            total: totalFinished,
+            exact: exactCount,
+            outcome: outcomeCount,
+            errors: errorsCount,
+            rate
+          });
+
+          // Fetch Recent History (Last 3 finished matches with guesses)
+          const finishedMatches = loadedMatches.filter((m: any) => m.score1 !== null && m.score2 !== null);
+          const historyList = finishedMatches
+            .map((match: any) => {
+              const guess = loadedGuesses.find(g => g.match_id === match.id);
+              return {
+                ...match,
+                guess: guess || null
+              };
+            })
+            .filter((m: any) => m.guess !== null)
+            .sort((a: any, b: any) => {
+              const dateA = new Date(`${a.date}T${a.time ? a.time.split(' ')[0] : '00:00'}`);
+              const dateB = new Date(`${b.date}T${b.time ? b.time.split(' ')[0] : '00:00'}`);
+              return dateB.getTime() - dateA.getTime();
+            })
+            .slice(0, 3);
+          setRecentHistory(historyList);
         }
       } catch (err) {
         console.error("Dashboard data fetch error:", err);
-        setUpcomingMatches(WORLD_CUP_DATA.matches.slice(0, 3));
       } finally {
         setLoading(false);
       }
     };
     fetchData();
   }, [router]);
+
+  const handleNextMatchScoreChange = (team: 1 | 2, val: string) => {
+    const numericVal = val.replace(/[^0-9]/g, '');
+    setNextMatchGuess((prev: any) => ({
+      ...prev,
+      [team === 1 ? 'score1' : 'score2']: numericVal
+    }));
+  };
+
+  const handleSaveNextMatchGuess = async () => {
+    if (!user || !nextMatch || !nextMatchGuess) return;
+    if (nextMatchGuess.score1 === '' || nextMatchGuess.score2 === '') {
+      toast.error('Preencha ambos os placares!');
+      return;
+    }
+
+    const now = new Date();
+    const timePart = nextMatch.time ? nextMatch.time.split(' ')[0] : '00:00';
+    const matchDateTime = new Date(`${nextMatch.date}T${timePart}`);
+    if (now >= matchDateTime) {
+      toast.error('Este jogo já começou! Não é mais permitido salvar palpites.');
+      return;
+    }
+
+    setSavingNextMatch(true);
+    try {
+      const { error } = await supabase
+        .from('guesses')
+        .upsert({
+          profile_id: user.id,
+          match_id: nextMatch.id,
+          score1: parseInt(nextMatchGuess.score1),
+          score2: parseInt(nextMatchGuess.score2),
+          yellow_cards_winner: nextMatchGuess.yellow_cards_winner || null,
+          has_red_card: nextMatchGuess.has_red_card !== undefined ? nextMatchGuess.has_red_card : null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'profile_id, match_id' });
+
+      if (error) throw error;
+      toast.success('Palpite do próximo jogo salvo com sucesso!');
+      setSavedNextMatch(true);
+      setTimeout(() => setSavedNextMatch(false), 2000);
+
+      // Refresh user guesses
+      const { data: updatedGuesses } = await supabase
+        .from('guesses')
+        .select('id, match_id, score1, score2, points_earned, yellow_cards_winner, has_red_card')
+        .eq('profile_id', user.id);
+
+      if (updatedGuesses) {
+        setUserGuesses(updatedGuesses);
+      }
+    } catch (err: any) {
+      toast.error('Erro ao salvar palpite: ' + (err.message || 'Tente novamente'));
+    } finally {
+      setSavingNextMatch(false);
+    }
+  };
+
 
   if (!isSupabaseConfigured) {
     return (
@@ -216,14 +410,8 @@ export default function Dashboard() {
               OLÁ, <span className="gradient-text italic">{profileName}</span>
             </h1>
           </div>
-          <div className="flex items-center gap-4 border-l border-slate-700 pl-8 hidden md:flex">
-            <div className="text-right">
-              <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Saldo de Hoje</p>
-              <p className="text-2xl font-black text-white leading-none">0 pts</p>
-            </div>
-          </div>
         </header>
-
+ 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
           {stats.map((stat, i) => (
@@ -236,19 +424,232 @@ export default function Dashboard() {
             >
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">{stat.label}</p>
-                <h3 className="text-5xl font-black tracking-tighter">{stat.value}</h3>
+                <h3 className="text-4xl font-black tracking-tighter">{stat.value}</h3>
               </div>
-              <div className={`w-16 h-16 ${stat.bg} ${stat.color} flex items-center justify-center rounded-2xl shadow-inner`}>
+              <div className={`w-16 h-16 ${stat.bg} ${stat.color} flex items-center justify-center rounded-2xl shadow-inner shrink-0`}>
                 <stat.icon size={32} />
               </div>
             </motion.div>
           ))}
         </div>
-
+ 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Main Feed */}
           <div className="lg:col-span-2 flex flex-col gap-12">
+            {/* Palpite Rápido (Próximo Jogo) */}
+            {nextMatch && nextMatchGuess && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass p-6 md:p-8 rounded-[32px] border-emerald-500/20 shadow-lg shadow-emerald-950/10 flex flex-col gap-6"
+              >
+                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Palpite Rápido (Próximo Jogo)</h4>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    {formatMatchDate(nextMatch.date)} • {formatMatchTime(nextMatch.time)}
+                  </span>
+                </div>
+
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                  {/* Team A */}
+                  <div className="flex items-center gap-3 flex-1 justify-end md:w-auto w-full">
+                    <span className="text-sm font-black text-slate-100 truncate text-right">{nextMatch.team1}</span>
+                    <div className="w-10 h-7 bg-slate-950 rounded border border-slate-800 overflow-hidden flex-shrink-0">
+                      <Flag code={getFlagCode(nextMatch.team1)} className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+
+                  {/* Input Score */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      maxLength={2}
+                      value={nextMatchGuess.score1}
+                      onChange={(e) => handleNextMatchScoreChange(1, e.target.value)}
+                      placeholder="-"
+                      className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 text-center text-lg font-black text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-700"
+                    />
+                    <span className="text-xs font-black text-slate-600 italic">X</span>
+                    <input
+                      type="text"
+                      maxLength={2}
+                      value={nextMatchGuess.score2}
+                      onChange={(e) => handleNextMatchScoreChange(2, e.target.value)}
+                      placeholder="-"
+                      className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 text-center text-lg font-black text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-700"
+                    />
+                  </div>
+
+                  {/* Team B */}
+                  <div className="flex items-center gap-3 flex-1 md:w-auto w-full">
+                    <div className="w-10 h-7 bg-slate-950 rounded border border-slate-800 overflow-hidden flex-shrink-0">
+                      <Flag code={getFlagCode(nextMatch.team2)} className="w-full h-full object-cover" />
+                    </div>
+                    <span className="text-sm font-black text-slate-100 truncate">{nextMatch.team2}</span>
+                  </div>
+
+                  {/* Save Button */}
+                  <button
+                    onClick={handleSaveNextMatchGuess}
+                    disabled={savingNextMatch}
+                    className="w-full md:w-auto px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {savingNextMatch ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : savedNextMatch ? (
+                      <CheckCircle2 size={14} />
+                    ) : (
+                      <Save size={14} />
+                    )}
+                    {savedNextMatch ? 'SALVO!' : 'SALVAR'}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {user && <EvolutionChart profileId={user.id} />}
+
+            {/* Split layout: Aproveitamento and Últimos Jogos */}
+            {user && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Taxa de Acerto */}
+                <div className="glass p-6 md:p-8 rounded-[32px] flex flex-col justify-between gap-6 border-slate-800/80">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
+                      <Target size={16} /> Taxa de Acerto e Rendimento
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
+                      Seu aproveitamento com base em jogos finalizados
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-around gap-4">
+                    {/* Circle yield indicator */}
+                    <div className="relative w-28 h-28 flex items-center justify-center">
+                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          className="stroke-slate-800"
+                          strokeWidth="10"
+                          fill="transparent"
+                        />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          className="stroke-emerald-500 transition-all duration-1000 ease-out"
+                          strokeWidth="10"
+                          fill="transparent"
+                          strokeDasharray={2 * Math.PI * 40}
+                          strokeDashoffset={2 * Math.PI * 40 * (1 - accuracyStats.rate / 100)}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute flex flex-col items-center">
+                        <span className="text-2xl font-black text-white">{accuracyStats.rate}%</span>
+                        <span className="text-[8px] font-black uppercase tracking-wider text-slate-500">APROVEIT.</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2.5">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
+                        <span className="font-bold text-slate-400">Cheios:</span>
+                        <span className="font-black text-white">{accuracyStats.exact}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-sm bg-cyan-500" />
+                        <span className="font-bold text-slate-400">Resultados:</span>
+                        <span className="font-black text-white">{accuracyStats.outcome}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" />
+                        <span className="font-bold text-slate-400">Erros:</span>
+                        <span className="font-black text-white">{accuracyStats.errors}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/60 rounded-2xl p-4 border border-slate-800/80 flex items-center justify-between text-center">
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Total Palpitado</p>
+                      <p className="text-lg font-black text-white mt-0.5">{accuracyStats.total}</p>
+                    </div>
+                    <div className="w-px h-8 bg-slate-800" />
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Acertos</p>
+                      <p className="text-lg font-black text-emerald-400 mt-0.5">{accuracyStats.exact + accuracyStats.outcome}</p>
+                    </div>
+                    <div className="w-px h-8 bg-slate-800" />
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Rendimento</p>
+                      <p className="text-lg font-black text-cyan-400 mt-0.5">
+                        {accuracyStats.total > 0 ? Math.round(((accuracyStats.exact * 3 + accuracyStats.outcome * 1) / (accuracyStats.total * 3)) * 100) : 0}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Meus Últimos Jogos */}
+                <div className="glass p-6 md:p-8 rounded-[32px] flex flex-col justify-between gap-6 border-slate-800/80">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
+                      <History size={16} /> Meus Últimos Jogos
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
+                      Histórico recente de palpites pontuados
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-3 flex-1 justify-center">
+                    {recentHistory.length > 0 ? (
+                      recentHistory.map((m: any) => {
+                        const isExact = m.guess && m.score1 === m.guess.score1 && m.score2 === m.guess.score2;
+                        const isOutcome = m.guess && !isExact && Math.sign(m.score1 - m.score2) === Math.sign(m.guess.score1 - m.guess.score2);
+                        
+                        return (
+                          <div key={m.id} className="p-3 bg-slate-900/40 border border-slate-800/60 rounded-xl flex items-center justify-between gap-4">
+                            {/* Match teams and scores */}
+                            <div className="flex flex-col gap-1 flex-1">
+                              <div className="flex items-center gap-2 justify-between">
+                                <span className="text-[11px] font-bold text-slate-300 truncate max-w-[80px]">{m.team1}</span>
+                                <span className="text-xs font-black text-white">{m.score1} - {m.score2}</span>
+                                <span className="text-[11px] font-bold text-slate-300 truncate max-w-[80px] text-right">{m.team2}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[9px] font-medium text-slate-500">
+                                <span>Meu palpite: <strong className="text-slate-400">{m.guess?.score1} x {m.guess?.score2}</strong></span>
+                              </div>
+                            </div>
+
+                            {/* Badge with point feedback */}
+                            <div className="flex-shrink-0 text-right">
+                              <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                                isExact 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
+                                  : isOutcome 
+                                    ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                +{m.guess?.points_earned || 0} pts
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-8 text-center border border-dashed border-slate-800 rounded-2xl">
+                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Nenhum palpite pontuado ainda</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {user && (
               <div className="space-y-6">
@@ -286,22 +687,91 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-
+ 
           {/* Sidebar */}
           <div className="flex flex-col gap-8">
             <section className="glass p-8 rounded-[32px]">
               <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 mb-8 flex items-center gap-3">
-                RANKING GLOBAL
+                <Trophy size={18} className="text-amber-500" /> OS 3 MELHORES
               </h3>
               <div className="flex flex-col gap-4">
-                <div className="py-12 text-center">
-                  <Trophy className="mx-auto text-slate-800 mb-4" size={32} />
-                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed">O ranking será atualizado após a abertura da copa</p>
-                </div>
-                <Link href="/dashboard/ranking" className="mt-6 text-center text-[10px] font-bold text-slate-500 hover:text-emerald-400 uppercase tracking-[0.2em] transition-colors">
-                  Ver Ranking Completo
+                {top3Profiles.length > 0 ? (
+                  top3Profiles.map((p, idx) => (
+                    <div key={p.id} className="flex items-center justify-between p-3 rounded-2xl bg-slate-900/50 border border-slate-800/80">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm text-slate-950 ${
+                          idx === 0 ? 'bg-amber-400' : idx === 1 ? 'bg-slate-300' : 'bg-amber-700 text-slate-200'
+                        }`}>
+                          {idx + 1}
+                        </div>
+                        <div className="w-10 h-10 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-center font-black text-emerald-400 uppercase overflow-hidden">
+                          {p.avatar_url ? (
+                            <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            p.full_name?.charAt(0) || p.username?.charAt(0) || '?'
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-white">{p.full_name || p.username}</p>
+                          {p.username && <p className="text-[9px] font-bold text-slate-500">@{p.username}</p>}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-black text-emerald-400">{p.points || 0} pts</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-6 text-center">
+                    <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed">Nenhum usuário no ranking ainda</p>
+                  </div>
+                )}
+                <Link href="/dashboard/ranking" className="mt-6 text-center text-[10px] font-bold text-slate-500 hover:text-emerald-400 uppercase tracking-[0.2em] transition-colors flex items-center justify-center gap-1">
+                  Ver Ranking Completo <ChevronRight size={12} />
                 </Link>
               </div>
+            </section>
+ 
+            <section className="glass p-8 rounded-[32px] flex flex-col gap-6">
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-400 flex items-center gap-3">
+                <Calendar size={18} className="text-emerald-400" /> PRÓXIMOS 3 DIAS
+              </h3>
+              
+              <div className="flex flex-col gap-4">
+                {next3DaysMatches.length > 0 ? (
+                  next3DaysMatches.map((match) => (
+                    <div key={match.id} className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between text-[9px] font-bold text-slate-500">
+                        <span>{formatMatchDate(match.date)}</span>
+                        <span>{formatMatchTime(match.time)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2 flex-1">
+                          <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800 flex-shrink-0">
+                            <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" />
+                          </div>
+                          <span className="text-xs font-black text-slate-200 truncate">{match.team1}</span>
+                        </div>
+                        <span className="text-[10px] font-black text-slate-600 italic">VS</span>
+                        <div className="flex items-center gap-2 flex-1 justify-end">
+                          <span className="text-xs font-black text-slate-200 truncate text-right">{match.team2}</span>
+                          <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800 flex-shrink-0">
+                            <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-6 text-center border border-dashed border-slate-800 rounded-2xl">
+                    <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed">Nenhum jogo nos próximos 3 dias</p>
+                  </div>
+                )}
+              </div>
+ 
+              <Link href="/dashboard/matches" className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2">
+                + PARTIDAS
+              </Link>
             </section>
           </div>
         </div>

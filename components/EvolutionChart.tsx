@@ -14,6 +14,7 @@ interface PointData {
   match: string;
   pointsEarned: number;
   cumulative: number;
+  avgCumulative: number;
 }
 
 export default function EvolutionChart({ profileId }: EvolutionChartProps) {
@@ -44,13 +45,36 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
 
         if (matchesError) throw matchesError;
 
-        // 3. Mapear palpites por match_id
+        // 3. Buscar TODOS os palpites para calcular a média do grupo
+        const { data: allGuessesData } = await supabase
+          .from('guesses')
+          .select('points_earned, match_id');
+
+        const avgMap = new Map<string, number>();
+        if (allGuessesData) {
+          const matchPointsSum = new Map<string, number>();
+          const matchPointsCount = new Map<string, number>();
+
+          allGuessesData.forEach(g => {
+            const currentSum = matchPointsSum.get(g.match_id) || 0;
+            const currentCount = matchPointsCount.get(g.match_id) || 0;
+            matchPointsSum.set(g.match_id, currentSum + (g.points_earned || 0));
+            matchPointsCount.set(g.match_id, currentCount + 1);
+          });
+
+          matchPointsSum.forEach((sum, matchId) => {
+            const count = matchPointsCount.get(matchId) || 1;
+            avgMap.set(matchId, Math.round((sum / count) * 10) / 10);
+          });
+        }
+
+        // 4. Mapear palpites do usuário por match_id
         const guessesMap = new Map<string, number>();
         (guessesData || []).forEach(g => {
           guessesMap.set(g.match_id, g.points_earned || 0);
         });
 
-        // 4. Filtrar e ordenar partidas cronologicamente
+        // 5. Filtrar e ordenar partidas cronologicamente
         const finishedMatches = (matchesData || [])
           .sort((a, b) => {
             const dateTimeA = new Date(`${a.date}T${a.time || '00:00'}`);
@@ -58,17 +82,21 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
             return dateTimeA.getTime() - dateTimeB.getTime();
           });
 
-        // 5. Construir os pontos acumulados
+        // 6. Construir os pontos acumulados do usuário e do grupo
         let runningTotal = 0;
+        let avgRunningTotal = 0;
         const pointsList: PointData[] = finishedMatches.map((m, idx) => {
           const earned = guessesMap.get(m.id) || 0;
+          const avgEarned = avgMap.get(m.id) || 0;
           runningTotal += earned;
+          avgRunningTotal += avgEarned;
           return {
             index: idx,
             label: `Jogo ${idx + 1}`,
             match: `${m.team1} ${m.score1} x ${m.score2} ${m.team2}`,
             pointsEarned: earned,
-            cumulative: runningTotal
+            cumulative: runningTotal,
+            avgCumulative: Math.round(avgRunningTotal * 10) / 10
           };
         });
 
@@ -115,7 +143,9 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
 
-  const maxPoints = Math.max(...data.map(d => d.cumulative), 5); // Garante escala mínima se todos forem 0
+  const maxUserPoints = Math.max(...data.map(d => d.cumulative), 5);
+  const maxAvgPoints = Math.max(...data.map(d => d.avgCumulative), 5);
+  const maxPoints = Math.max(maxUserPoints, maxAvgPoints);
   const totalPointsCount = data.length;
 
   // Converter pontos em coordenadas SVG
@@ -128,20 +158,24 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
     return paddingTop + chartHeight - (val / maxPoints) * chartHeight;
   };
 
-  // Construir a linha do gráfico
+  // Construir as linhas do gráfico
   let linePath = '';
   let areaPath = '';
+  let avgLinePath = '';
 
   data.forEach((pt, idx) => {
     const x = getX(idx);
     const y = getY(pt.cumulative);
+    const yAvg = getY(pt.avgCumulative);
 
     if (idx === 0) {
       linePath = `M ${x} ${y}`;
       areaPath = `M ${x} ${paddingTop + chartHeight} L ${x} ${y}`;
+      avgLinePath = `M ${x} ${yAvg}`;
     } else {
       linePath += ` L ${x} ${y}`;
       areaPath += ` L ${x} ${y}`;
+      avgLinePath += ` L ${x} ${yAvg}`;
     }
 
     if (idx === data.length - 1) {
@@ -170,12 +204,11 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
     if (closestPt) {
       setActivePoint(closestPt);
       const x = getX(closestPt.index);
-      const y = getY(closestPt.cumulative);
       
       // Ajustar o tooltip em relação ao container pai
       setTooltipPos({
         x: (x / width) * rect.width,
-        y: (y / height) * rect.height - 85
+        y: (getY(closestPt.cumulative) / height) * rect.height - 95
       });
     }
   };
@@ -186,15 +219,20 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
 
   return (
     <div ref={containerRef} className="relative w-full bg-slate-950/40 p-6 rounded-3xl border border-slate-800/80 backdrop-blur-md">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Evolução do Desempenho</h4>
-          <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Histórico de pontos acumulados jogo a jogo</p>
+          <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Histórico de pontos acumulados comparado à média</p>
         </div>
-        <div className="text-right">
-          <span className="text-xs font-black text-white bg-slate-900 border border-slate-800 px-3 py-1 rounded-xl">
-            {data[data.length - 1].cumulative} pts acumulados
-          </span>
+        <div className="flex items-center gap-4 text-[9px] uppercase font-black tracking-widest bg-slate-900/50 p-2 border border-slate-800/60 rounded-2xl">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-emerald-400 rounded-full" />
+            <span className="text-slate-300">Você</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 border-t-2 border-dashed border-purple-500" />
+            <span className="text-slate-400">Média do Grupo</span>
+          </div>
         </div>
       </div>
 
@@ -248,12 +286,24 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
             );
           })}
 
-          {/* Área com gradiente */}
+          {/* Área com gradiente (Usuário) */}
           {data.length > 1 && (
             <path d={areaPath} fill="url(#areaGrad)" />
           )}
 
-          {/* Linha principal */}
+          {/* Linha da Média Geral (Dashed Purple) */}
+          {data.length > 1 && (
+            <path 
+              d={avgLinePath} 
+              fill="none" 
+              stroke="#A855F7" 
+              strokeWidth="2" 
+              strokeDasharray="3 3"
+              strokeLinecap="round"
+            />
+          )}
+
+          {/* Linha principal (Usuário) */}
           {data.length > 1 && (
             <path 
               d={linePath} 
@@ -289,7 +339,7 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
         {/* Tooltip HTML Dinâmico em Overlay */}
         {activePoint && (
           <div 
-            className="absolute pointer-events-none z-50 bg-slate-900/95 border border-emerald-500/30 p-3 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col gap-1 text-left min-w-[160px] transition-all duration-150 ease-out"
+            className="absolute pointer-events-none z-50 bg-slate-900/95 border border-emerald-500/30 p-3 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col gap-1 text-left min-w-[170px] transition-all duration-150 ease-out"
             style={{ 
               left: `${tooltipPos.x}px`, 
               top: `${tooltipPos.y}px`,
@@ -303,8 +353,12 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
               {activePoint.match}
             </span>
             <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-800">
-              <span className="text-[9px] font-bold text-emerald-400">Ganhos: +{activePoint.pointsEarned} pts</span>
+              <span className="text-[9px] font-bold text-emerald-400">Você: +{activePoint.pointsEarned} pts</span>
               <span className="text-[10px] font-black text-white">{activePoint.cumulative} pts</span>
+            </div>
+            <div className="flex items-center justify-between text-[9px] font-bold text-purple-400">
+              <span>Média Geral:</span>
+              <span className="font-black text-white">{activePoint.avgCumulative} pts</span>
             </div>
           </div>
         )}

@@ -91,6 +91,31 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+CREATE OR REPLACE FUNCTION public.is_match_started(p_match_id TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    match_date TEXT;
+    match_time TEXT;
+    match_datetime TIMESTAMPTZ;
+BEGIN
+    SELECT date, time INTO match_date, match_time
+    FROM public.matches
+    WHERE id = p_match_id;
+    
+    IF NOT FOUND THEN
+        RETURN FALSE;
+    END IF;
+
+    BEGIN
+        match_datetime := (match_date || ' ' || COALESCE(match_time, '00:00'))::TIMESTAMPTZ;
+    EXCEPTION WHEN OTHERS THEN
+        match_datetime := (match_date || ' 00:00')::TIMESTAMPTZ;
+    END;
+
+    RETURN NOW() > match_datetime;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Limpar políticas existentes para evitar erros de duplicata na execução
 DO $$ 
 BEGIN
@@ -108,7 +133,9 @@ BEGIN
     DROP POLICY IF EXISTS "Usuários podem sair de grupos" ON public.group_members;
     DROP POLICY IF EXISTS "Admin pode gerenciar membros" ON public.group_members;
     DROP POLICY IF EXISTS "Palpites são privados ao dono" ON public.guesses;
+    DROP POLICY IF EXISTS "Palpites são privados ao dono ou visíveis após o início" ON public.guesses;
     DROP POLICY IF EXISTS "Usuários podem criar/editar seus palpites" ON public.guesses;
+    DROP POLICY IF EXISTS "Usuários podem criar/editar seus palpites antes do jogo começar" ON public.guesses;
     DROP POLICY IF EXISTS "Admin pode gerenciar palpites" ON public.guesses;
 END $$;
 
@@ -130,8 +157,11 @@ CREATE POLICY "Usuários podem entrar em grupos" ON public.group_members FOR INS
 CREATE POLICY "Usuários podem sair de grupos" ON public.group_members FOR DELETE USING (auth.uid() = profile_id OR is_admin());
 CREATE POLICY "Admin pode gerenciar membros" ON public.group_members FOR ALL USING (is_admin());
 
-CREATE POLICY "Palpites são privados ao dono" ON public.guesses FOR SELECT USING (auth.uid() = profile_id OR is_admin());
-CREATE POLICY "Usuários podem criar/editar seus palpites" ON public.guesses FOR ALL USING (auth.uid() = profile_id OR is_admin());
+CREATE POLICY "Palpites são privados ao dono ou visíveis após o início" ON public.guesses FOR SELECT USING (auth.uid() = profile_id OR is_admin() OR public.is_match_started(match_id));
+CREATE POLICY "Usuários podem criar/editar seus palpites antes do jogo começar" ON public.guesses FOR ALL USING (
+  (auth.uid() = profile_id OR is_admin())
+  AND (is_admin() OR NOT public.is_match_started(match_id))
+);
 CREATE POLICY "Admin pode gerenciar palpites" ON public.guesses FOR ALL USING (is_admin());
 
 -- TRIGGER PARA CRIAR PERFIL NO SIGNUP
