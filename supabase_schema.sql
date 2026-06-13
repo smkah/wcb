@@ -712,6 +712,15 @@ BEGIN
         RETURN NEW;
     END IF;
 
+    -- Permite atualizações se os palpites em si não mudaram (recalculando pontos, etc)
+    IF TG_OP = 'UPDATE' AND 
+       OLD.score1 = NEW.score1 AND 
+       OLD.score2 = NEW.score2 AND 
+       COALESCE(OLD.yellow_cards_winner, '') = COALESCE(NEW.yellow_cards_winner, '') AND 
+       COALESCE(OLD.has_red_card, false) = COALESCE(NEW.has_red_card, false) THEN
+        RETURN NEW;
+    END IF;
+
     SELECT date, time INTO match_date, match_time
     FROM public.matches
     WHERE id = NEW.match_id;
