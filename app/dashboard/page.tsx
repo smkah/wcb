@@ -43,11 +43,11 @@ export default function Dashboard() {
   const [top3Profiles, setTop3Profiles] = useState<any[]>([]);
   const [next3DaysMatches, setNext3DaysMatches] = useState<any[]>([]);
   
-  // Premium widgets state
-  const [nextMatch, setNextMatch] = useState<any | null>(null);
-  const [nextMatchGuess, setNextMatchGuess] = useState<any | null>(null);
-  const [savingNextMatch, setSavingNextMatch] = useState(false);
-  const [savedNextMatch, setSavedNextMatch] = useState(false);
+  // Today's matches states
+  const [todayMatches, setTodayMatches] = useState<any[]>([]);
+  const [todayGuesses, setTodayGuesses] = useState<Record<string, { score1: string, score2: string, yellow_cards_winner?: string, has_red_card?: boolean }>>({});
+  const [savingTodayGuess, setSavingTodayGuess] = useState<Record<string, boolean>>({});
+  const [savedTodayGuess, setSavedTodayGuess] = useState<Record<string, boolean>>({});
   const [accuracyStats, setAccuracyStats] = useState<{
     total: number;
     exact: number;
@@ -190,28 +190,27 @@ export default function Dashboard() {
           
           setPendingReminderMatches(pending);
 
-          // Find the next upcoming match chronologically
-          const futureMatches = loadedMatches.filter((match: any) => {
-            const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-            const matchDateTime = new Date(`${match.date}T${timePart}`);
-            return matchDateTime > now;
-          });
-          const nextM = futureMatches[0] || null;
-          setNextMatch(nextM);
+          // Find today's matches
+          const todayStr = new Date().toLocaleDateString('en-CA');
+          const todayM = loadedMatches.filter((m: any) => m.date === todayStr);
+          setTodayMatches(todayM);
 
-          if (nextM) {
-            const existingG = loadedGuesses.find(g => g.match_id === nextM.id);
+          // Populate today's guesses state
+          const todayGuessesMap: Record<string, any> = {};
+          todayM.forEach(m => {
+            const existingG = loadedGuesses.find(g => g.match_id === m.id);
             if (existingG) {
-              setNextMatchGuess({
+              todayGuessesMap[m.id] = {
                 score1: String(existingG.score1 ?? ''),
                 score2: String(existingG.score2 ?? ''),
                 yellow_cards_winner: existingG.yellow_cards_winner || '',
-                has_red_card: existingG.has_red_card
-              });
+                has_red_card: existingG.has_red_card !== null ? existingG.has_red_card : undefined
+              };
             } else {
-              setNextMatchGuess({ score1: '', score2: '', yellow_cards_winner: '', has_red_card: null });
+              todayGuessesMap[m.id] = { score1: '', score2: '', yellow_cards_winner: '', has_red_card: undefined };
             }
-          }
+          });
+          setTodayGuesses(todayGuessesMap);
 
           // Calculate Accuracy Stats
           const finishedGuessed = loadedGuesses.filter(g => {
@@ -276,47 +275,92 @@ export default function Dashboard() {
     fetchData();
   }, [router]);
 
-  const handleNextMatchScoreChange = (team: 1 | 2, val: string) => {
-    const numericVal = val.replace(/[^0-9]/g, '');
-    setNextMatchGuess((prev: any) => ({
-      ...prev,
-      [team === 1 ? 'score1' : 'score2']: numericVal
-    }));
+  const isMatchStarted = (match: any) => {
+    if (!match?.date) return false;
+    const timePart = match.time ? match.time.split(' ')[0] : '00:00';
+    const matchDateTime = new Date(`${match.date}T${timePart}`);
+    return new Date() > matchDateTime;
   };
 
-  const handleSaveNextMatchGuess = async () => {
-    if (!user || !nextMatch || !nextMatchGuess) return;
-    if (nextMatchGuess.score1 === '' || nextMatchGuess.score2 === '') {
+  const handleTodayScoreChange = (matchId: string, team: 1 | 2, val: string) => {
+    const numericVal = val.replace(/[^0-9]/g, '');
+    setTodayGuesses((prev) => {
+      const matchGuess = prev[matchId] || { score1: '', score2: '' };
+      return {
+        ...prev,
+        [matchId]: {
+          ...matchGuess,
+          [team === 1 ? 'score1' : 'score2']: numericVal
+        }
+      };
+    });
+  };
+
+  const handleTodayYellowCardsChange = (matchId: string, value: string) => {
+    setTodayGuesses((prev) => {
+      const matchGuess = prev[matchId] || { score1: '', score2: '' };
+      return {
+        ...prev,
+        [matchId]: {
+          ...matchGuess,
+          yellow_cards_winner: value
+        }
+      };
+    });
+  };
+
+  const handleTodayRedCardChange = (matchId: string, value: boolean) => {
+    setTodayGuesses((prev) => {
+      const matchGuess = prev[matchId] || { score1: '', score2: '' };
+      return {
+        ...prev,
+        [matchId]: {
+          ...matchGuess,
+          has_red_card: value
+        }
+      };
+    });
+  };
+
+  const handleSaveTodayGuess = async (matchId: string) => {
+    if (!user) return;
+    const guess = todayGuesses[matchId];
+    if (!guess || guess.score1 === '' || guess.score2 === '') {
       toast.error('Preencha ambos os placares!');
       return;
     }
 
+    const match = todayMatches.find(m => m.id === matchId);
+    if (!match) return;
+
     const now = new Date();
-    const timePart = nextMatch.time ? nextMatch.time.split(' ')[0] : '00:00';
-    const matchDateTime = new Date(`${nextMatch.date}T${timePart}`);
-    if (now >= matchDateTime) {
+    const timePart = match.time ? match.time.split(' ')[0] : '00:00';
+    const matchDateTime = new Date(`${match.date}T${timePart}`);
+    if (!isAdmin && now >= matchDateTime) {
       toast.error('Este jogo já começou! Não é mais permitido salvar palpites.');
       return;
     }
 
-    setSavingNextMatch(true);
+    setSavingTodayGuess(prev => ({ ...prev, [matchId]: true }));
     try {
       const { error } = await supabase
         .from('guesses')
         .upsert({
           profile_id: user.id,
-          match_id: nextMatch.id,
-          score1: parseInt(nextMatchGuess.score1),
-          score2: parseInt(nextMatchGuess.score2),
-          yellow_cards_winner: nextMatchGuess.yellow_cards_winner || null,
-          has_red_card: nextMatchGuess.has_red_card !== undefined ? nextMatchGuess.has_red_card : null,
+          match_id: matchId,
+          score1: parseInt(guess.score1),
+          score2: parseInt(guess.score2),
+          yellow_cards_winner: guess.yellow_cards_winner || null,
+          has_red_card: guess.has_red_card !== undefined ? guess.has_red_card : null,
           updated_at: new Date().toISOString()
         }, { onConflict: 'profile_id, match_id' });
 
       if (error) throw error;
-      toast.success('Palpite do próximo jogo salvo com sucesso!');
-      setSavedNextMatch(true);
-      setTimeout(() => setSavedNextMatch(false), 2000);
+      toast.success('Palpite salvo com sucesso!');
+      setSavedTodayGuess(prev => ({ ...prev, [matchId]: true }));
+      setTimeout(() => {
+        setSavedTodayGuess(prev => ({ ...prev, [matchId]: false }));
+      }, 2000);
 
       // Refresh user guesses
       const { data: updatedGuesses } = await supabase
@@ -330,7 +374,7 @@ export default function Dashboard() {
     } catch (err: any) {
       toast.error('Erro ao salvar palpite: ' + (err.message || 'Tente novamente'));
     } finally {
-      setSavingNextMatch(false);
+      setSavingTodayGuess(prev => ({ ...prev, [matchId]: false }));
     }
   };
 
@@ -436,79 +480,168 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Main Feed */}
           <div className="lg:col-span-2 flex flex-col gap-12">
-            {/* Palpite Rápido (Próximo Jogo) */}
-            {nextMatch && nextMatchGuess && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="glass p-6 md:p-8 rounded-[32px] border-emerald-500/20 shadow-lg shadow-emerald-950/10 flex flex-col gap-6"
-              >
-                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Palpite Rápido (Próximo Jogo)</h4>
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    {formatMatchDate(nextMatch.date)} • {formatMatchTime(nextMatch.time)}
-                  </span>
+            {/* Palpites dos Jogos de Hoje */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass p-6 md:p-8 rounded-[32px] border-emerald-500/20 shadow-lg shadow-emerald-950/10 flex flex-col gap-6"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <h4 className="text-sm font-black uppercase tracking-[0.2em] text-emerald-400">Jogos de Hoje</h4>
                 </div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
+                </span>
+              </div>
 
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                  {/* Team A */}
-                  <div className="flex items-center gap-3 flex-1 justify-end md:w-auto w-full">
-                    <span className="text-sm font-black text-slate-100 truncate text-right">{nextMatch.team1}</span>
-                    <div className="w-10 h-7 bg-slate-950 rounded border border-slate-800 overflow-hidden flex-shrink-0">
-                      <Flag code={getFlagCode(nextMatch.team1)} className="w-full h-full object-cover" />
-                    </div>
-                  </div>
+              {todayMatches.length > 0 ? (
+                <div className="flex flex-col gap-8 divide-y divide-slate-800/60">
+                  {todayMatches.map((match, idx) => {
+                    const guess = todayGuesses[match.id] || { score1: '', score2: '', yellow_cards_winner: '', has_red_card: undefined };
+                    const isSaving = savingTodayGuess[match.id] || false;
+                    const isSaved = savedTodayGuess[match.id] || false;
+                    const isStarted = isMatchStarted(match);
 
-                  {/* Input Score */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      maxLength={2}
-                      value={nextMatchGuess.score1}
-                      onChange={(e) => handleNextMatchScoreChange(1, e.target.value)}
-                      placeholder="-"
-                      className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 text-center text-lg font-black text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-700"
-                    />
-                    <span className="text-xs font-black text-slate-600 italic">X</span>
-                    <input
-                      type="text"
-                      maxLength={2}
-                      value={nextMatchGuess.score2}
-                      onChange={(e) => handleNextMatchScoreChange(2, e.target.value)}
-                      placeholder="-"
-                      className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 text-center text-lg font-black text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder-slate-700"
-                    />
-                  </div>
+                    return (
+                      <div key={match.id} className={`flex flex-col gap-4 ${idx > 0 ? 'pt-8' : ''}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="px-3 py-0.5 glass-emerald text-emerald-400 text-[9px] font-black rounded-lg uppercase tracking-widest">
+                            {match.round}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            {formatMatchTime(match.time)}
+                          </span>
+                        </div>
 
-                  {/* Team B */}
-                  <div className="flex items-center gap-3 flex-1 md:w-auto w-full">
-                    <div className="w-10 h-7 bg-slate-950 rounded border border-slate-800 overflow-hidden flex-shrink-0">
-                      <Flag code={getFlagCode(nextMatch.team2)} className="w-full h-full object-cover" />
-                    </div>
-                    <span className="text-sm font-black text-slate-100 truncate">{nextMatch.team2}</span>
-                  </div>
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                          {/* Match Teams and Scores */}
+                          <div className="flex items-center gap-2 sm:gap-4 justify-center w-full md:w-auto flex-1">
+                            {/* Team A */}
+                            <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                              <span className="font-bold text-xs sm:text-sm uppercase truncate text-right">{match.team1}</span>
+                              <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                                <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" />
+                              </div>
+                            </div>
 
-                  {/* Save Button */}
-                  <button
-                    onClick={handleSaveNextMatchGuess}
-                    disabled={savingNextMatch}
-                    className="w-full md:w-auto px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {savingNextMatch ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : savedNextMatch ? (
-                      <CheckCircle2 size={14} />
-                    ) : (
-                      <Save size={14} />
-                    )}
-                    {savedNextMatch ? 'SALVO!' : 'SALVAR'}
-                  </button>
+                            {/* Inputs */}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <input
+                                type="text"
+                                value={guess.score1}
+                                onChange={(e) => handleTodayScoreChange(match.id, 1, e.target.value)}
+                                disabled={isStarted}
+                                className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-base focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                placeholder="0"
+                              />
+                              <span className="font-black text-slate-700 italic text-sm">X</span>
+                              <input
+                                type="text"
+                                value={guess.score2}
+                                onChange={(e) => handleTodayScoreChange(match.id, 2, e.target.value)}
+                                disabled={isStarted}
+                                className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-base focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                placeholder="0"
+                              />
+                            </div>
+
+                            {/* Team B */}
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                                <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" />
+                              </div>
+                              <span className="font-bold text-xs sm:text-sm uppercase truncate text-left">{match.team2}</span>
+                            </div>
+                          </div>
+
+                          {/* Save Button for this match */}
+                          <div className="flex items-center gap-3 w-full md:w-auto shrink-0 justify-end">
+                            <button
+                              onClick={() => handleSaveTodayGuess(match.id)}
+                              disabled={!guess.score1 || !guess.score2 || isSaving || isStarted}
+                              className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all w-full md:w-auto flex items-center justify-center gap-2 ${
+                                isSaved
+                                  ? 'bg-emerald-500 text-slate-900 shadow-md shadow-emerald-500/10'
+                                  : 'bg-slate-900 hover:bg-emerald-500 hover:text-slate-900 border border-slate-800 hover:border-emerald-500 text-slate-400 disabled:opacity-30 disabled:hover:bg-slate-900 disabled:hover:text-slate-400 disabled:hover:border-slate-800'
+                              }`}
+                            >
+                              {isSaving ? <Loader2 size={12} className="animate-spin" /> : isSaved ? <CheckCircle2 size={12} /> : <Save size={12} />}
+                              {isSaved ? 'SALVO' : 'SALVAR'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Extra predictions (Cards) */}
+                        <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2.5 mt-1">
+                          <div className="flex flex-col sm:flex-row gap-4 justify-between">
+                            {/* Yellow Cards Winner */}
+                            <div className="flex items-center justify-between gap-4 flex-1">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Mais Amarelos (3 pts)</span>
+                              <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                                {[
+                                  { value: match.team1, label: match.team1.substring(0, 3).toUpperCase() },
+                                  { value: 'Empate', label: 'EMP' },
+                                  { value: match.team2, label: match.team2.substring(0, 3).toUpperCase() }
+                                ].map((opt, optIdx) => (
+                                  <button
+                                    key={`${opt.value}-${optIdx}`}
+                                    type="button"
+                                    disabled={isStarted}
+                                    onClick={() => handleTodayYellowCardsChange(match.id, opt.value)}
+                                    className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all ${
+                                      guess.yellow_cards_winner === opt.value
+                                        ? 'bg-amber-500 text-slate-900 shadow'
+                                        : 'text-slate-500 hover:text-slate-300'
+                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Red Card */}
+                            <div className="flex items-center justify-between gap-4 flex-1">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Terá Vermelho? (4 pts)</span>
+                              <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                                {[
+                                  { value: true, label: 'SIM' },
+                                  { value: false, label: 'NÃO' }
+                                ].map(opt => (
+                                  <button
+                                    key={String(opt.value)}
+                                    type="button"
+                                    disabled={isStarted}
+                                    onClick={() => handleTodayRedCardChange(match.id, opt.value)}
+                                    className={`px-3 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all ${
+                                      guess.has_red_card === opt.value
+                                        ? 'bg-emerald-500 text-slate-900 shadow'
+                                        : 'text-slate-500 hover:text-slate-300'
+                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </motion.div>
-            )}
+              ) : (
+                <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-2">
+                  <Calendar size={32} className="text-slate-600 mb-1" />
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nenhum jogo agendado para hoje</p>
+                  <Link href="/dashboard/matches" className="text-[10px] font-black text-emerald-400 hover:text-emerald-300 uppercase tracking-widest mt-1">
+                    Visualizar calendário completo
+                  </Link>
+                </div>
+              )}
+            </motion.div>
 
             {user && <EvolutionChart profileId={user.id} />}
 
