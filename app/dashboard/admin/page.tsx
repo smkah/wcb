@@ -807,6 +807,15 @@ export default function AdminPage() {
                 <section className="glass p-10 rounded-[40px]">
                   <h2 className="text-2xl font-black uppercase tracking-tighter mb-8">AÇÕES RÁPIDAS</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Link 
+                      href="/dashboard/api-football"
+                      className="flex items-center gap-4 p-6 bg-slate-900 rounded-3xl border border-slate-800 hover:border-emerald-500/50 transition-all group"
+                    >
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-emerald-400">
+                        <Plus size={20} />
+                      </div>
+                      <span className="font-bold text-xs uppercase tracking-widest text-left">Integração API-Football</span>
+                    </Link>
                     <button 
                       onClick={handleSyncMatches}
                       disabled={isSyncing}
