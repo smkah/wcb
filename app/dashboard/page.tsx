@@ -505,15 +505,10 @@ export default function Dashboard() {
                     const isSaving = savingTodayGuess[match.id] || false;
                     const isSaved = savedTodayGuess[match.id] || false;
                     const isStarted = isMatchStarted(match);
-                    const isPassed = (match.score1 !== null && match.score2 !== null) || (() => {
-                      if (!match.date) return false;
-                      const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-                      const matchDateTime = new Date(`${match.date}T${timePart}`);
-                      return new Date() > matchDateTime;
-                    })();
+                    const isEnded = match.score1 !== null && match.score2 !== null;
 
                     return (
-                      <div key={match.id} className={`flex flex-col gap-4 ${idx > 0 ? 'pt-8' : ''} ${isPassed ? 'opacity-50' : ''}`}>
+                      <div key={match.id} className={`flex flex-col gap-4 ${idx > 0 ? 'pt-8' : ''} ${isEnded ? 'opacity-50' : ''}`}>
                         <div className="flex items-center justify-between">
                           <span className="px-3 py-0.5 glass-emerald text-emerald-400 text-[9px] font-black rounded-lg uppercase tracking-widest">
                             {match.round}
@@ -530,7 +525,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
                               <span className="font-bold text-xs sm:text-sm uppercase truncate text-right">{match.team1}</span>
                               <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                                <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isPassed ? 'grayscale' : ''}`} />
+                                <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
                               </div>
                             </div>
 
@@ -558,7 +553,7 @@ export default function Dashboard() {
                             {/* Team B */}
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                                <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isPassed ? 'grayscale' : ''}`} />
+                                <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
                               </div>
                               <span className="font-bold text-xs sm:text-sm uppercase truncate text-left">{match.team2}</span>
                             </div>

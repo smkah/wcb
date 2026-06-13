@@ -615,12 +615,7 @@ export default function MatchesPage() {
     const isSaving = saving === match.id;
     const isSaved = saved === match.id;
     const isStarted = (isMatchStarted(match) || (match.score1 !== null && match.score2 !== null));
-    const isPassed = (match.score1 !== null && match.score2 !== null) || (() => {
-      if (!match.date) return false;
-      const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-      const matchDateTime = new Date(`${match.date}T${timePart}`);
-      return new Date() > matchDateTime;
-    })();
+    const isEnded = match.score1 !== null && match.score2 !== null;
 
     if (viewMode === 'list') {
       return (
@@ -629,7 +624,7 @@ export default function MatchesPage() {
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.01 }}
-          className={`glass p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-emerald-500/30 transition-all ${isPassed ? 'opacity-50' : ''}`}
+          className={`glass p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-emerald-500/30 transition-all ${isEnded ? 'opacity-50' : ''}`}
         >
           <div className="flex items-center gap-4 min-w-[120px]">
             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/50 px-3 py-1 rounded-md">
@@ -642,7 +637,7 @@ export default function MatchesPage() {
               <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-end min-w-0">
                 <span className="font-bold text-[10px] md:text-sm uppercase truncate text-right">{match.team1}</span>
                 <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                  <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isPassed ? 'grayscale' : ''}`} />
+                  <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
                 </div>
               </div>
 
@@ -668,7 +663,7 @@ export default function MatchesPage() {
 
               <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
                 <div className="w-6 h-4 md:w-8 md:h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                  <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isPassed ? 'grayscale' : ''}`} />
+                  <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
                 </div>
                 <span className="font-bold text-[10px] md:text-sm uppercase truncate text-left">{match.team2}</span>
               </div>
@@ -820,7 +815,7 @@ export default function MatchesPage() {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: i * 0.02 }}
-        className={`glass rounded-[32px] group hover:border-emerald-500/30 transition-all ${viewMode === 'compact' ? 'p-6' : 'p-8'} ${isPassed ? 'opacity-50' : ''}`}
+        className={`glass rounded-[32px] group hover:border-emerald-500/30 transition-all ${viewMode === 'compact' ? 'p-6' : 'p-8'} ${isEnded ? 'opacity-50' : ''}`}
       >
         <div className={`flex justify-between items-center ${viewMode === 'compact' ? 'mb-6' : 'mb-8'}`}>
           <div className="flex items-center gap-2">
@@ -848,7 +843,7 @@ export default function MatchesPage() {
         <div className={`flex items-center justify-between gap-4 ${viewMode === 'compact' ? 'mb-6' : 'mb-10'}`}>
           <div className="flex flex-col items-center gap-3 flex-1 text-center">
             <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
-              <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isPassed ? 'grayscale' : ''}`} fallback={<span className="font-bold text-[10px]">{match.team1.substring(0, 3).toUpperCase()}</span>} />
+              <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} fallback={<span className="font-bold text-[10px]">{match.team1.substring(0, 3).toUpperCase()}</span>} />
             </div>
             <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team1}</span>
           </div>
@@ -877,7 +872,7 @@ export default function MatchesPage() {
 
           <div className="flex flex-col items-center gap-3 flex-1 text-center">
             <div className={`relative ${viewMode === 'compact' ? 'w-12 h-8' : 'w-16 h-10'} bg-slate-900 rounded-sm border border-slate-700 overflow-hidden flex items-center justify-center shadow-inner text-white`}>
-              <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isPassed ? 'grayscale' : ''}`} fallback={<span className="font-bold text-[10px]">{match.team2.substring(0, 3).toUpperCase()}</span>} />
+              <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} fallback={<span className="font-bold text-[10px]">{match.team2.substring(0, 3).toUpperCase()}</span>} />
             </div>
             <span className={`font-bold uppercase tracking-tight line-clamp-1 ${viewMode === 'compact' ? 'text-sm' : 'text-base'}`}>{match.team2}</span>
           </div>
