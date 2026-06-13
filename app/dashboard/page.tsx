@@ -276,12 +276,10 @@ export default function Dashboard() {
   }, [router]);
 
   const isMatchStarted = (match: any) => {
-    if (process.env.NODE_ENV === 'development') return false;
     if (!match?.date) return false;
     const timePart = match.time ? match.time.split(' ')[0] : '00:00';
     const matchDateTime = new Date(`${match.date}T${timePart}`);
-    const lockTime = new Date(matchDateTime.getTime() + 2 * 60 * 60 * 1000);
-    return new Date() > lockTime;
+    return new Date() > matchDateTime;
   };
 
   const handleTodayScoreChange = (matchId: string, team: 1 | 2, val: string) => {
