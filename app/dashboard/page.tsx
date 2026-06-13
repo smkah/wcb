@@ -279,7 +279,8 @@ export default function Dashboard() {
     if (!match?.date) return false;
     const timePart = match.time ? match.time.split(' ')[0] : '00:00';
     const matchDateTime = new Date(`${match.date}T${timePart}`);
-    return new Date() > matchDateTime;
+    const lockTime = new Date(matchDateTime.getTime() + 2 * 60 * 60 * 1000);
+    return new Date() > lockTime;
   };
 
   const handleTodayScoreChange = (matchId: string, team: 1 | 2, val: string) => {

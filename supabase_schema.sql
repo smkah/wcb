@@ -112,7 +112,7 @@ BEGIN
         match_datetime := (match_date || ' 00:00')::TIMESTAMPTZ;
     END;
 
-    RETURN NOW() > match_datetime;
+    RETURN NOW() > match_datetime + INTERVAL '2 hours';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -732,8 +732,8 @@ BEGIN
             match_datetime := (match_date || ' 00:00')::TIMESTAMPTZ;
         END;
 
-        IF NOW() > match_datetime THEN
-            RAISE EXCEPTION 'Este jogo já iniciou. Não é permitido salvar palpites.';
+        IF NOW() > match_datetime + INTERVAL '2 hours' THEN
+            RAISE EXCEPTION 'Este jogo já encerrou (em andamento por mais de 2 horas). Não é permitido salvar palpites.';
         END IF;
     END IF;
     RETURN NEW;
