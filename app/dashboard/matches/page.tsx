@@ -26,6 +26,7 @@ export default function MatchesPage() {
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [userGroups, setUserGroups] = useState<any[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<'matches' | 'standings'>('matches');
+  const [groupBy, setGroupBy] = useState<'phase' | 'date'>('phase');
   const [groupPredictions, setGroupPredictions] = useState<Record<string, { firstPlace: string, secondPlace: string, thirdPlace: string, thirdPlaceQualified: boolean }>>({});
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [groupResults, setGroupResults] = useState<any[]>([]);
@@ -268,6 +269,37 @@ export default function MatchesPage() {
     }));
   };
 
+  const groupedByDate = matches.reduce((acc, match) => {
+    const date = match.date || 'Sem Data';
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(match);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  // Sort matches inside each date
+  Object.keys(groupedByDate).forEach(date => {
+    groupedByDate[date].sort((a: any, b: any) => {
+      const timeA = a.time || '';
+      const timeB = b.time || '';
+      return timeA.localeCompare(timeB);
+    });
+  });
+
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) => a.localeCompare(b));
+
+  const getFormattedDateHeader = (dateStr: string) => {
+    if (!dateStr || dateStr === 'Sem Data') return 'Sem Data';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    const weekdays = ['DOMINGO', 'SEGUNDA-FEIRA', 'TERÇA-FEIRA', 'QUARTA-FEIRA', 'QUINTA-FEIRA', 'SEXTA-FEIRA', 'SÁBADO'];
+    const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+    const weekday = weekdays[date.getDay()];
+    const monthName = months[date.getMonth()];
+    return `${weekday}, ${parseInt(day, 10)} DE ${monthName}`;
+  };
+
   const handleCustomGuessChange = (matchId: string, groupId: string, ruleName: string, value: string) => {
     setGuesses(prev => {
       const matchGuess = prev[matchId] || { scoreA: '', scoreB: '', custom_guesses: {} };
@@ -420,15 +452,14 @@ export default function MatchesPage() {
     }
   };
 
-  const handleAIFillPredictions = async (phaseName: string) => {
+  const handleAIFillPredictions = async (roundMatches: any[], label: string) => {
     if (!user) {
       toast.error("Você precisa estar logado!");
       return;
     }
 
-    const toastId = toast.loading(`Processando preenchimento com IA para ${phaseName}...`);
+    const toastId = toast.loading(`Processando preenchimento com IA para ${label}...`);
     try {
-      const roundMatches = groupedMatches[phaseName];
       if (!roundMatches || roundMatches.length === 0) {
         throw new Error("Nenhuma partida encontrada nesta fase.");
       }
@@ -570,7 +601,7 @@ export default function MatchesPage() {
         apiGuessesToUpsert.forEach(g => next.add(g.match_id));
         return next;
       });
-      toast.success(`Palpites da fase ${phaseName} preenchidos com sucesso!`, { id: toastId });
+      toast.success(`Palpites da fase ${label} preenchidos com sucesso!`, { id: toastId });
     } catch (err: any) {
       console.error("AI Fill failed:", err);
       toast.error("Erro ao preencher com IA: " + (err.message || "Tente novamente"), { id: toastId });
@@ -1029,138 +1060,245 @@ export default function MatchesPage() {
             </div>
           </header>
 
-          {/* Sub-tab switcher */}
-          <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 mb-12 max-w-md">
-            <button
-              onClick={() => setActiveSubTab('matches')}
-              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'matches'
-                  ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
-                  : 'text-slate-500 hover:text-slate-300'
-                }`}
-            >
-              Partidas
-            </button>
-            <button
-              onClick={() => setActiveSubTab('standings')}
-              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'standings'
-                  ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
-                  : 'text-slate-500 hover:text-slate-300'
-                }`}
-            >
-              Fase de Grupos (Classificação)
-            </button>
+          {/* Sub-tab switcher and Group-by option */}
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-12">
+            <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 w-full md:max-w-md">
+              <button
+                onClick={() => setActiveSubTab('matches')}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'matches'
+                    ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                    : 'text-slate-500 hover:text-slate-300'
+                  }`}
+              >
+                Partidas
+              </button>
+              <button
+                onClick={() => setActiveSubTab('standings')}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'standings'
+                    ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                    : 'text-slate-500 hover:text-slate-300'
+                  }`}
+              >
+                Fase de Grupos (Classificação)
+              </button>
+            </div>
+
+            {activeSubTab === 'matches' && (
+              <div className="flex items-center gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-3">
+                  Agrupar por:
+                </span>
+                <button
+                  onClick={() => setGroupBy('phase')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${groupBy === 'phase'
+                      ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                      : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                >
+                  Fases
+                </button>
+                <button
+                  onClick={() => setGroupBy('date')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${groupBy === 'date'
+                      ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                      : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                >
+                  Datas
+                </button>
+              </div>
+            )}
           </div>
 
           {activeSubTab === 'matches' ? (
-            <div className="space-y-20">
-              {sortedPhases.map((round, sectionIdx) => {
-                const roundMatches = groupedMatches[round];
-                const isCollapsed = collapsedPhases[round];
-                const totalCount = roundMatches.length;
-                const guessedCount = roundMatches.filter((m: any) => {
-                  const g = guesses[m.id];
-                  return g && g.scoreA !== '' && g.scoreB !== '';
-                }).length;
+            groupBy === 'phase' ? (
+              <div className="space-y-20">
+                {sortedPhases.map((round, sectionIdx) => {
+                  const roundMatches = groupedMatches[round];
+                  const isCollapsed = collapsedPhases[round];
+                  const totalCount = roundMatches.length;
+                  const guessedCount = roundMatches.filter((m: any) => {
+                    const g = guesses[m.id];
+                    return g && g.scoreA !== '' && g.scoreB !== '';
+                  }).length;
 
-                return (
-                  <motion.section
-                    key={round}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: sectionIdx * 0.1 }}
-                  >
-                    <div
-                      className="flex items-center gap-6 mb-8 cursor-pointer select-none group"
+                  return (
+                    <motion.section
+                      key={round}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: sectionIdx * 0.1 }}
                     >
-                      <h2 className="text-xl font-black uppercase tracking-tighter text-emerald-400 flex flex-wrap items-center gap-3" onClick={() => togglePhaseCollapse(round)}>
-                        {round}
-                        <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-                          ({guessedCount}/{totalCount} salvos)
-                        </span>
-                      </h2>
+                      <div
+                        className="flex items-center gap-6 mb-8 cursor-pointer select-none group"
+                      >
+                        <h2 className="text-xl font-black uppercase tracking-tighter text-emerald-400 flex flex-wrap items-center gap-3" onClick={() => togglePhaseCollapse(round)}>
+                          {round}
+                          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                            ({guessedCount}/{totalCount} salvos)
+                          </span>
+                        </h2>
 
-                      <div className="flex gap-2 items-center flex-shrink-0">
-                        {isAdmin && (
+                        <div className="flex gap-2 items-center flex-shrink-0">
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAIFillPredictions(roundMatches, round);
+                              }}
+                              className="px-3.5 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 cursor-pointer hover:scale-[1.03] active:scale-95"
+                            >
+                              Preencher IA
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAIFillPredictions(round);
-                            }}
-                            className="px-3.5 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 cursor-pointer hover:scale-[1.03] active:scale-95"
+                            onClick={() => togglePhaseCollapse(round)}
+                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
                           >
-                            Preencher IA
+                            {isCollapsed ? 'Expandir' : 'Minimizar'}
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => togglePhaseCollapse(round)}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
-                        >
-                          {isCollapsed ? 'Expandir' : 'Minimizar'}
-                        </button>
+                        </div>
+
+                        <div className="h-px flex-1 bg-slate-800 group-hover:bg-emerald-500/20 transition-colors" onClick={() => togglePhaseCollapse(round)} />
                       </div>
 
-                      <div className="h-px flex-1 bg-slate-800 group-hover:bg-emerald-500/20 transition-colors" onClick={() => togglePhaseCollapse(round)} />
-                    </div>
+                      <AnimatePresence initial={false}>
+                        {!isCollapsed && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            {round === "FASE DE GRUPOS" ? (
+                              (() => {
+                                const groupsMap: Record<string, any[]> = {};
+                                (roundMatches as any[]).forEach(match => {
+                                  const letter = match.group || 'Outros';
+                                  if (!groupsMap[letter]) groupsMap[letter] = [];
+                                  groupsMap[letter].push(match);
+                                });
+                                const sortedGroupLetters = Object.keys(groupsMap).sort();
+                                return (
+                                  <div className="space-y-16">
+                                    {sortedGroupLetters.map((groupLetter) => {
+                                      const groupMatchesList = groupsMap[groupLetter];
+                                      return (
+                                        <div key={groupLetter} className="space-y-6">
+                                          <div className="flex items-center gap-4">
+                                            <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-black uppercase tracking-widest rounded-xl">
+                                              GRUPO {groupLetter.toUpperCase()}
+                                            </span>
+                                            <div className="h-px flex-1 bg-slate-800/40" />
+                                          </div>
+                                          <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' :
+                                              viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                                                'grid-cols-1'
+                                            }`}>
+                                            {groupMatchesList.map((match, i) => renderMatchCard(match, i))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' :
+                                  viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                                    'grid-cols-1'
+                                }`}>
+                                {(roundMatches as any[]).map((match, i) => renderMatchCard(match, i))}
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.section>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-20">
+                {sortedDates.map((dateStr, sectionIdx) => {
+                  const dateMatches = groupedByDate[dateStr];
+                  const isCollapsed = collapsedPhases[dateStr];
+                  const totalCount = dateMatches.length;
+                  const guessedCount = dateMatches.filter((m: any) => {
+                    const g = guesses[m.id];
+                    return g && g.scoreA !== '' && g.scoreB !== '';
+                  }).length;
 
-                    <AnimatePresence initial={false}>
-                      {!isCollapsed && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          {round === "FASE DE GRUPOS" ? (
-                            (() => {
-                              const groupsMap: Record<string, any[]> = {};
-                              (roundMatches as any[]).forEach(match => {
-                                const letter = match.group || 'Outros';
-                                if (!groupsMap[letter]) groupsMap[letter] = [];
-                                groupsMap[letter].push(match);
-                              });
-                              const sortedGroupLetters = Object.keys(groupsMap).sort();
-                              return (
-                                <div className="space-y-16">
-                                  {sortedGroupLetters.map((groupLetter) => {
-                                    const groupMatchesList = groupsMap[groupLetter];
-                                    return (
-                                      <div key={groupLetter} className="space-y-6">
-                                        <div className="flex items-center gap-4">
-                                          <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-black uppercase tracking-widest rounded-xl">
-                                            GRUPO {groupLetter.toUpperCase()}
-                                          </span>
-                                          <div className="h-px flex-1 bg-slate-800/40" />
-                                        </div>
-                                        <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' :
-                                            viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
-                                              'grid-cols-1'
-                                          }`}>
-                                          {groupMatchesList.map((match, i) => renderMatchCard(match, i))}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })()
-                          ) : (
+                  const formattedHeader = getFormattedDateHeader(dateStr);
+
+                  return (
+                    <motion.section
+                      key={dateStr}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: sectionIdx * 0.1 }}
+                    >
+                      <div
+                        className="flex items-center gap-6 mb-8 cursor-pointer select-none group"
+                      >
+                        <h2 className="text-xl font-black uppercase tracking-tighter text-emerald-400 flex flex-wrap items-center gap-3" onClick={() => togglePhaseCollapse(dateStr)}>
+                          {formattedHeader}
+                          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                            ({guessedCount}/{totalCount} salvos)
+                          </span>
+                        </h2>
+
+                        <div className="flex gap-2 items-center flex-shrink-0">
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAIFillPredictions(dateMatches, formattedHeader);
+                              }}
+                              className="px-3.5 py-1.5 bg-emerald-500 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/15 cursor-pointer hover:scale-[1.03] active:scale-95"
+                            >
+                              Preencher IA
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => togglePhaseCollapse(dateStr)}
+                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
+                          >
+                            {isCollapsed ? 'Expandir' : 'Minimizar'}
+                          </button>
+                        </div>
+
+                        <div className="h-px flex-1 bg-slate-800 group-hover:bg-emerald-500/20 transition-colors" onClick={() => togglePhaseCollapse(dateStr)} />
+                      </div>
+
+                      <AnimatePresence initial={false}>
+                        {!isCollapsed && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
                             <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2' :
                                 viewMode === 'compact' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
                                   'grid-cols-1'
                               }`}>
-                              {(roundMatches as any[]).map((match, i) => renderMatchCard(match, i))}
+                              {(dateMatches as any[]).map((match, i) => renderMatchCard(match, i))}
                             </div>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.section>
-                );
-              })}
-            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.section>
+                  );
+                })}
+              </div>
+            )
           ) : (
             <div className="space-y-12 pb-24">
               <div className="glass p-8 rounded-[32px] border-emerald-500/10">
