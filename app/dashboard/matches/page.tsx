@@ -624,7 +624,7 @@ export default function MatchesPage() {
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.01 }}
-          className={`glass p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-emerald-500/30 transition-all ${isEnded ? 'opacity-50' : ''}`}
+          className={`glass p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 group hover:border-emerald-500/30 transition-all ${isEnded ? 'opacity-50 grayscale' : ''}`}
         >
           <div className="flex items-center gap-4 min-w-[120px]">
             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-900/50 px-3 py-1 rounded-md">
@@ -815,7 +815,7 @@ export default function MatchesPage() {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: i * 0.02 }}
-        className={`glass rounded-[32px] group hover:border-emerald-500/30 transition-all ${viewMode === 'compact' ? 'p-6' : 'p-8'} ${isEnded ? 'opacity-50' : ''}`}
+        className={`glass rounded-[32px] group hover:border-emerald-500/30 transition-all ${viewMode === 'compact' ? 'p-6' : 'p-8'} ${isEnded ? 'opacity-50 grayscale' : ''}`}
       >
         <div className={`flex justify-between items-center ${viewMode === 'compact' ? 'mb-6' : 'mb-8'}`}>
           <div className="flex items-center gap-2">

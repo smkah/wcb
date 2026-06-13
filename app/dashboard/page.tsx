@@ -508,7 +508,7 @@ export default function Dashboard() {
                     const isEnded = match.score1 !== null && match.score2 !== null;
 
                     return (
-                      <div key={match.id} className={`flex flex-col gap-4 ${idx > 0 ? 'pt-8' : ''} ${isEnded ? 'opacity-50' : ''}`}>
+                      <div key={match.id} className={`flex flex-col gap-4 ${idx > 0 ? 'pt-8' : ''} ${isEnded ? 'opacity-50 grayscale' : ''}`}>
                         <div className="flex items-center justify-between">
                           <span className="px-3 py-0.5 glass-emerald text-emerald-400 text-[9px] font-black rounded-lg uppercase tracking-widest">
                             {match.round}
