@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
-import { formatMatchDate, formatMatchTime } from '@/lib/utils';
+import { formatMatchDate, formatMatchTime, parseMatchDateTime } from '@/lib/utils';
 import EvolutionChart from '@/components/EvolutionChart';
 import { BADGES_DEFINITION, calculateUserBadges } from '@/lib/badges';
 
@@ -182,8 +182,7 @@ export default function Dashboard() {
           const pending = loadedMatches.filter((match: any) => {
             if (guessedMatchIds.has(match.id)) return false;
             
-            const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-            const matchDateTime = new Date(`${match.date}T${timePart}`);
+            const matchDateTime = parseMatchDateTime(match.date, match.time);
             
             return matchDateTime > now && matchDateTime <= twoHoursFromNow;
           });
@@ -259,8 +258,8 @@ export default function Dashboard() {
             })
             .filter((m: any) => m.guess !== null)
             .sort((a: any, b: any) => {
-              const dateA = new Date(`${a.date}T${a.time ? a.time.split(' ')[0] : '00:00'}`);
-              const dateB = new Date(`${b.date}T${b.time ? b.time.split(' ')[0] : '00:00'}`);
+              const dateA = parseMatchDateTime(a.date, a.time);
+              const dateB = parseMatchDateTime(b.date, b.time);
               return dateB.getTime() - dateA.getTime();
             })
             .slice(0, 3);
@@ -277,8 +276,7 @@ export default function Dashboard() {
 
   const isMatchStarted = (match: any) => {
     if (!match?.date) return false;
-    const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-    const matchDateTime = new Date(`${match.date}T${timePart}`);
+    const matchDateTime = parseMatchDateTime(match.date, match.time);
     return new Date() > matchDateTime;
   };
 
@@ -334,8 +332,7 @@ export default function Dashboard() {
     if (!match) return;
 
     const now = new Date();
-    const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-    const matchDateTime = new Date(`${match.date}T${timePart}`);
+    const matchDateTime = parseMatchDateTime(match.date, match.time);
     if (!isAdmin && now >= matchDateTime) {
       toast.error('Este jogo já começou! Não é mais permitido salvar palpites.');
       return;

@@ -13,7 +13,7 @@ import MatchStatsModal from '@/components/MatchStatsModal';
 
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
-import { formatMatchDate, formatMatchTime } from '@/lib/utils';
+import { formatMatchDate, formatMatchTime, parseMatchDateTime } from '@/lib/utils';
 
 export default function MatchesPage() {
   const [guesses, setGuesses] = useState<Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string> }>>({});
@@ -132,8 +132,7 @@ export default function MatchesPage() {
 
   const isMatchStarted = (match: any) => {
     if (!match?.date) return false;
-    const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-    const matchDateTime = new Date(`${match.date}T${timePart}`);
+    const matchDateTime = parseMatchDateTime(match.date, match.time);
     return new Date() > matchDateTime;
   };
 
@@ -143,10 +142,8 @@ export default function MatchesPage() {
     if (groupMatches.length === 0) return null;
 
     const sorted = [...groupMatches].sort((a, b) => {
-      const timeA = a.time ? a.time.split(' ')[0] : '00:00';
-      const timeB = b.time ? b.time.split(' ')[0] : '00:00';
-      const dateTimeA = new Date(`${a.date}T${timeA}`);
-      const dateTimeB = new Date(`${b.date}T${timeB}`);
+      const dateTimeA = parseMatchDateTime(a.date, a.time);
+      const dateTimeB = parseMatchDateTime(b.date, b.time);
       return dateTimeA.getTime() - dateTimeB.getTime();
     });
 
@@ -162,17 +159,14 @@ export default function MatchesPage() {
     }
 
     const sortedFirstRound = [...firstRoundMatches].sort((a, b) => {
-      const timeA = a.time ? a.time.split(' ')[0] : '00:00';
-      const timeB = b.time ? b.time.split(' ')[0] : '00:00';
-      const dateTimeA = new Date(`${a.date}T${timeA}`);
-      const dateTimeB = new Date(`${b.date}T${timeB}`);
+      const dateTimeA = parseMatchDateTime(a.date, a.time);
+      const dateTimeB = parseMatchDateTime(b.date, b.time);
       return dateTimeA.getTime() - dateTimeB.getTime();
     });
 
     if (sortedFirstRound.length === 0) return null;
     const lastMatch = sortedFirstRound[sortedFirstRound.length - 1];
-    const timePart = lastMatch.time ? lastMatch.time.split(' ')[0] : '00:00';
-    const lastMatchStart = new Date(`${lastMatch.date}T${timePart}`);
+    const lastMatchStart = parseMatchDateTime(lastMatch.date, lastMatch.time);
     return new Date(lastMatchStart.getTime() + 2 * 60 * 60 * 1000);
   };
 

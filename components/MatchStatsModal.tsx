@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, RefreshCw, Lock, BarChart2, Users, AlertCircle, HelpCircle, Newspaper, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseMatchDateTime } from '@/lib/utils';
 
 interface MatchStatsModalProps {
   isOpen: boolean;
@@ -66,8 +67,7 @@ export default function MatchStatsModal({ isOpen, onClose, match }: MatchStatsMo
 
   const isMatchStarted = () => {
     if (!match?.date) return false;
-    const timePart = match.time ? match.time.split(' ')[0] : '00:00';
-    const matchDateTime = new Date(`${match.date}T${timePart}`);
+    const matchDateTime = parseMatchDateTime(match.date, match.time);
     return new Date() > matchDateTime;
   };
 
