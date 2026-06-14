@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { WORLD_CUP_DATA } from './data';
+import { normalizeTeamName } from './utils';
 
 export const adminApi = {
   // Profiles/Users
@@ -230,6 +231,56 @@ export const adminApi = {
     if (error) throw error;
   },
 
+  async sanitizeGuessesYellowCards() {
+    const { data: matches, error: matchesError } = await supabase
+      .from('matches')
+      .select('id, team1, team2');
+    if (matchesError) throw matchesError;
+
+    const { data: guesses, error: guessesError } = await supabase
+      .from('guesses')
+      .select('id, match_id, yellow_cards_winner')
+      .not('yellow_cards_winner', 'is', null)
+      .neq('yellow_cards_winner', 'Empate');
+    if (guessesError) throw guessesError;
+
+    const matchesMap = new Map(matches.map(m => [m.id, m]));
+    const updates = [];
+
+    for (const g of guesses) {
+      const match = matchesMap.get(g.match_id);
+      if (!match) continue;
+
+      const normWinner = normalizeTeamName(g.yellow_cards_winner);
+      const normTeam1 = normalizeTeamName(match.team1);
+      const normTeam2 = normalizeTeamName(match.team2);
+
+      let correctName = null;
+      if (normWinner === normTeam1 && g.yellow_cards_winner !== match.team1) {
+        correctName = match.team1;
+      } else if (normWinner === normTeam2 && g.yellow_cards_winner !== match.team2) {
+        correctName = match.team2;
+      }
+
+      if (correctName) {
+        updates.push({
+          id: g.id,
+          yellow_cards_winner: correctName
+        });
+      }
+    }
+
+    if (updates.length > 0) {
+      console.log(`Sanitizing ${updates.length} guesses yellow card values...`);
+      for (const u of updates) {
+        await supabase
+          .from('guesses')
+          .update({ yellow_cards_winner: u.yellow_cards_winner })
+          .eq('id', u.id);
+      }
+    }
+  },
+
   async syncInitialMatches() {
     const { data: dbMatches, error: fetchError } = await supabase.from('matches').select('id, date, time, ground');
     if (fetchError) throw fetchError;
@@ -272,6 +323,12 @@ export const adminApi = {
         .update({ date: update.date, time: update.time, ground: update.ground })
         .eq('id', update.id);
       if (error) throw error;
+    }
+
+    try {
+      await adminApi.sanitizeGuessesYellowCards();
+    } catch (err) {
+      console.error("Failed to sanitize guesses yellow cards during sync:", err);
     }
 
     return true;

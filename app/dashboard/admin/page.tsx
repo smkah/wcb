@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
-import { formatMatchDate, formatMatchTime } from '@/lib/utils';
+import { formatMatchDate, formatMatchTime, mapMatchesToBrazil } from '@/lib/utils';
 
 type TabType = 'overview' | 'users' | 'groups' | 'matches' | 'standings';
 
@@ -162,7 +162,7 @@ export default function AdminPage() {
         supabase.from('guesses').select('profile_id, match_id, score1, score2').then(res => res.data || [])
       ]);
       console.log("Fetched admin data:", { usersCount: users.length, groupsCount: groups.length, matchesCount: matches.length, guessesCount: guessesRes.length });
-      setData({ users: users || [], groups: groups || [], matches: matches || [] });
+      setData({ users: users || [], groups: groups || [], matches: mapMatchesToBrazil(matches || []) });
       setAllGuesses(guessesRes || []);
     } catch (error) {
       console.error("Error fetching admin data:", error);
@@ -184,6 +184,13 @@ export default function AdminPage() {
         router.push('/dashboard');
       } else {
         setUser(user);
+        // Automatically run initial matches sync and guesses yellow card normalization on load
+        try {
+          await adminApi.syncInitialMatches();
+          console.log("Automatic matches and guesses sync successful on admin page load.");
+        } catch (syncErr) {
+          console.error("Automatic sync on admin load failed:", syncErr);
+        }
         await fetchAllData();
         await fetchGroupResults();
       }

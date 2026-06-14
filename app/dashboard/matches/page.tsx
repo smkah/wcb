@@ -13,10 +13,10 @@ import MatchStatsModal from '@/components/MatchStatsModal';
 
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
-import { formatMatchDate, formatMatchTime, parseMatchDateTime } from '@/lib/utils';
+import { formatMatchDate, formatMatchTime, parseMatchDateTime, normalizeTeamName, mapMatchesToBrazil } from '@/lib/utils';
 
 export default function MatchesPage() {
-  const [guesses, setGuesses] = useState<Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string> }>>({});
+  const [guesses, setGuesses] = useState<Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string>, pointsEarned?: number }>>({});
   const [existingGuesses, setExistingGuesses] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export default function MatchesPage() {
         if (matchesError) throw matchesError;
 
         const finalMatches = (matchesData && matchesData.length > 0) ? matchesData : WORLD_CUP_DATA.matches;
-        setMatches(finalMatches);
+        setMatches(mapMatchesToBrazil(finalMatches));
 
         // Fetch group results
         const { data: resultsData } = await supabase.from('group_results').select('*');
@@ -72,7 +72,7 @@ export default function MatchesPage() {
             .eq('profile_id', user.id);
 
           if (!guessesError && guessesData) {
-            const guessesMap: Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string> }> = {};
+            const guessesMap: Record<string, { scoreA: string, scoreB: string, yellowCardsWinner?: string, hasRedCard?: boolean, custom_guesses?: Record<string, string>, pointsEarned?: number }> = {};
             const existingSet = new Set<string>();
             guessesData.forEach(g => {
               existingSet.add(g.match_id);
@@ -81,7 +81,8 @@ export default function MatchesPage() {
                 scoreB: String(g.score2),
                 yellowCardsWinner: g.yellow_cards_winner || '',
                 hasRedCard: g.has_red_card !== null ? g.has_red_card : undefined,
-                custom_guesses: g.custom_guesses || {}
+                custom_guesses: g.custom_guesses || {},
+                pointsEarned: g.points_earned !== null ? g.points_earned : undefined
               };
             });
             setGuesses(guessesMap);
@@ -661,6 +662,35 @@ export default function MatchesPage() {
               </div>
             </div>
 
+            {isEnded && (
+              <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-left space-y-2 mt-2 w-full">
+                <div className="flex items-center justify-between border-b border-emerald-500/10 pb-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Resultado Oficial
+                  </span>
+                  {guess.pointsEarned !== undefined && (
+                    <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
+                      +{guess.pointsEarned} pts
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                  <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                    <p className="text-[8px] text-slate-500">Placar</p>
+                    <p className="text-white font-black mt-0.5">{match.score1} x {match.score2}</p>
+                  </div>
+                  <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                    <p className="text-[8px] text-slate-500">Mais Amarelos</p>
+                    <p className="text-amber-400 font-black mt-0.5 truncate">{match.yellow_cards_winner || '-'}</p>
+                  </div>
+                  <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                    <p className="text-[8px] text-slate-500">Vermelho?</p>
+                    <p className="text-emerald-400 font-black mt-0.5">{match.has_red_card === true ? 'SIM' : match.has_red_card === false ? 'NÃO' : '-'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Standard card rules (Yellow / Red cards) */}
             <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2 flex-shrink-0 mt-2">
               <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Cartões do Jogo</p>
@@ -687,7 +717,8 @@ export default function MatchesPage() {
                             }
                           }));
                         }}
-                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${guess.yellowCardsWinner === opt.value
+                        className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all ${
+                          (guess.yellowCardsWinner && opt.value && normalizeTeamName(guess.yellowCardsWinner) === normalizeTeamName(opt.value))
                             ? 'bg-amber-500 text-slate-900 shadow'
                             : 'text-slate-500 hover:text-slate-300'
                           } disabled:opacity-40 disabled:cursor-not-allowed`}
@@ -870,6 +901,35 @@ export default function MatchesPage() {
           </div>
         </div>
 
+        {isEnded && (
+          <div className="mb-4 p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-left space-y-2 w-full">
+            <div className="flex items-center justify-between border-b border-emerald-500/10 pb-1.5">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Resultado Oficial
+              </span>
+              {guess.pointsEarned !== undefined && (
+                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
+                  +{guess.pointsEarned} pts
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-300">
+              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                <p className="text-[8px] text-slate-500">Placar</p>
+                <p className="text-white font-black mt-0.5">{match.score1} x {match.score2}</p>
+              </div>
+              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                <p className="text-[8px] text-slate-500">Mais Amarelos</p>
+                <p className="text-amber-400 font-black mt-0.5 truncate">{match.yellow_cards_winner || '-'}</p>
+              </div>
+              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                <p className="text-[8px] text-slate-500">Vermelho?</p>
+                <p className="text-emerald-400 font-black mt-0.5">{match.has_red_card === true ? 'SIM' : match.has_red_card === false ? 'NÃO' : '-'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Standard card rules (Yellow / Red cards) in Grid/Compact Mode */}
         <div className="mb-6 p-4 bg-slate-950/40 rounded-2xl border border-slate-800/80 space-y-3">
           <p className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-400">Cartões do Jogo</p>
@@ -896,7 +956,8 @@ export default function MatchesPage() {
                         }
                       }));
                     }}
-                    className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center truncate max-w-[120px] ${guess.yellowCardsWinner === opt.value
+                    className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all flex-1 text-center truncate max-w-[120px] ${
+                      (guess.yellowCardsWinner && opt.value && normalizeTeamName(guess.yellowCardsWinner) === normalizeTeamName(opt.value))
                         ? 'bg-amber-500 text-slate-900 shadow-md shadow-amber-500/10'
                         : 'text-slate-500 hover:text-slate-300'
                       } disabled:opacity-40 disabled:cursor-not-allowed`}

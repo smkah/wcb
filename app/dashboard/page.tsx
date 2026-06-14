@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 
 import { WORLD_CUP_DATA } from '@/lib/data';
 import { getFlagCode } from '@/lib/countries';
-import { formatMatchDate, formatMatchTime, parseMatchDateTime } from '@/lib/utils';
+import { formatMatchDate, formatMatchTime, parseMatchDateTime, normalizeTeamName, mapMatchesToBrazil } from '@/lib/utils';
 import EvolutionChart from '@/components/EvolutionChart';
 import { BADGES_DEFINITION, calculateUserBadges } from '@/lib/badges';
 
@@ -143,11 +143,8 @@ export default function Dashboard() {
           .order('date', { ascending: true })
           .order('time', { ascending: true });
         
-        if (matches && matches.length > 0) {
-          loadedMatches = matches;
-        } else {
-          loadedMatches = WORLD_CUP_DATA.matches;
-        }
+        const rawMatches = (matches && matches.length > 0) ? matches : WORLD_CUP_DATA.matches;
+        loadedMatches = mapMatchesToBrazil(rawMatches);
 
         // Filter matches for the next 3 days (Today, Tomorrow, Day After)
         const localDate = new Date();
@@ -203,10 +200,11 @@ export default function Dashboard() {
                 score1: String(existingG.score1 ?? ''),
                 score2: String(existingG.score2 ?? ''),
                 yellow_cards_winner: existingG.yellow_cards_winner || '',
-                has_red_card: existingG.has_red_card !== null ? existingG.has_red_card : undefined
+                has_red_card: existingG.has_red_card !== null ? existingG.has_red_card : undefined,
+                points_earned: existingG.points_earned !== null ? existingG.points_earned : undefined
               };
             } else {
-              todayGuessesMap[m.id] = { score1: '', score2: '', yellow_cards_winner: '', has_red_card: undefined };
+              todayGuessesMap[m.id] = { score1: '', score2: '', yellow_cards_winner: '', has_red_card: undefined, points_earned: undefined };
             }
           });
           setTodayGuesses(todayGuessesMap);
@@ -571,6 +569,35 @@ export default function Dashboard() {
                           </div>
                         </div>
 
+                        {isEnded && (
+                          <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-left space-y-2 mt-2 w-full">
+                            <div className="flex items-center justify-between border-b border-emerald-500/10 pb-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Resultado Oficial
+                              </span>
+                              {guess.points_earned !== undefined && (
+                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
+                                  +{guess.points_earned} pts
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                                <p className="text-[8px] text-slate-500">Placar</p>
+                                <p className="text-white font-black mt-0.5">{match.score1} x {match.score2}</p>
+                              </div>
+                              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                                <p className="text-[8px] text-slate-500">Mais Amarelos</p>
+                                <p className="text-amber-400 font-black mt-0.5 truncate">{match.yellow_cards_winner || '-'}</p>
+                              </div>
+                              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                                <p className="text-[8px] text-slate-500">Vermelho?</p>
+                                <p className="text-emerald-400 font-black mt-0.5">{match.has_red_card === true ? 'SIM' : match.has_red_card === false ? 'NÃO' : '-'}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Extra predictions (Cards) */}
                         <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2.5 mt-1">
                           <div className="flex flex-col sm:flex-row gap-4 justify-between">
@@ -589,7 +616,7 @@ export default function Dashboard() {
                                     disabled={isStarted}
                                     onClick={() => handleTodayYellowCardsChange(match.id, opt.value)}
                                     className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all ${
-                                      guess.yellow_cards_winner === opt.value
+                                      (guess.yellow_cards_winner && opt.value && normalizeTeamName(guess.yellow_cards_winner) === normalizeTeamName(opt.value))
                                         ? 'bg-amber-500 text-slate-900 shadow'
                                         : 'text-slate-500 hover:text-slate-300'
                                     } disabled:opacity-40 disabled:cursor-not-allowed`}

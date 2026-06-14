@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, RefreshCw, Lock, BarChart2, Users, AlertCircle, HelpCircle, Newspaper, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { parseMatchDateTime } from '@/lib/utils';
+import { parseMatchDateTime, normalizeTeamName } from '@/lib/utils';
 
 interface MatchStatsModalProps {
   isOpen: boolean;
@@ -95,9 +95,9 @@ export default function MatchStatsModal({ isOpen, onClose, match }: MatchStatsMo
 
     if (g.has_red_card === true) redCardSimCount++;
 
-    if (g.yellow_cards_winner === match.team1) yellowTeam1Count++;
+    if (g.yellow_cards_winner && match.team1 && normalizeTeamName(g.yellow_cards_winner) === normalizeTeamName(match.team1)) yellowTeam1Count++;
     else if (g.yellow_cards_winner === 'Empate') yellowEmpateCount++;
-    else if (g.yellow_cards_winner === match.team2) yellowTeam2Count++;
+    else if (g.yellow_cards_winner && match.team2 && normalizeTeamName(g.yellow_cards_winner) === normalizeTeamName(match.team2)) yellowTeam2Count++;
   });
 
   const getPercent = (count: number) => {

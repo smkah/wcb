@@ -110,6 +110,7 @@ DECLARE
     match_date TEXT;
     match_time TEXT;
     match_datetime TIMESTAMPTZ;
+    cleaned_time TEXT;
 BEGIN
     SELECT date, time INTO match_date, match_time
     FROM public.matches
@@ -119,8 +120,11 @@ BEGIN
         RETURN FALSE;
     END IF;
 
+    -- Remove "UTC" prefix so PostgreSQL can parse timezone offsets (e.g. '21:00 UTC-7' -> '21:00 -7')
+    cleaned_time := replace(match_time, 'UTC', '');
+
     BEGIN
-        match_datetime := (match_date || ' ' || COALESCE(match_time, '00:00'))::TIMESTAMPTZ;
+        match_datetime := (match_date || ' ' || COALESCE(cleaned_time, '00:00'))::TIMESTAMPTZ;
     EXCEPTION WHEN OTHERS THEN
         match_datetime := (match_date || ' 00:00')::TIMESTAMPTZ;
     END;
@@ -240,3 +244,17 @@ UPDATE public.matches SET team1 = 'Gana' WHERE team1 = 'Ghana';
 UPDATE public.matches SET team2 = 'Gana' WHERE team2 = 'Ghana';
 UPDATE public.matches SET team1 = 'Panamá' WHERE team1 = 'Panama';
 UPDATE public.matches SET team2 = 'Panamá' WHERE team2 = 'Panama';
+
+-- MIGRATION: Corrigir data e hora do jogo Austrália vs Turquia (m20) com timezone correto
+UPDATE public.matches SET date = '2026-06-13', time = '21:00 UTC-7' WHERE id = 'm20';
+
+-- MIGRATION: Corrigir palpites de cartão amarelo salvos anteriormente sem acento para corresponder ao nome oficial com acento
+UPDATE public.guesses SET yellow_cards_winner = 'Austrália' WHERE yellow_cards_winner = 'Australia';
+UPDATE public.guesses SET yellow_cards_winner = 'México' WHERE yellow_cards_winner = 'Mexico';
+UPDATE public.guesses SET yellow_cards_winner = 'Suíça' WHERE yellow_cards_winner = 'Suica';
+UPDATE public.guesses SET yellow_cards_winner = 'Bélgica' WHERE yellow_cards_winner = 'Belgica';
+UPDATE public.guesses SET yellow_cards_winner = 'Japão' WHERE yellow_cards_winner = 'Japao';
+UPDATE public.guesses SET yellow_cards_winner = 'Croácia' WHERE yellow_cards_winner = 'Croacia';
+UPDATE public.guesses SET yellow_cards_winner = 'Camarões' WHERE yellow_cards_winner = 'Camaroes';
+UPDATE public.guesses SET yellow_cards_winner = 'Áustria' WHERE yellow_cards_winner = 'Austria';
+UPDATE public.guesses SET yellow_cards_winner = 'Panamá' WHERE yellow_cards_winner = 'Panama';

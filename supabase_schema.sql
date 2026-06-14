@@ -97,6 +97,7 @@ DECLARE
     match_date TEXT;
     match_time TEXT;
     match_datetime TIMESTAMPTZ;
+    cleaned_time TEXT;
 BEGIN
     SELECT date, time INTO match_date, match_time
     FROM public.matches
@@ -106,13 +107,16 @@ BEGIN
         RETURN FALSE;
     END IF;
 
+    -- Remove "UTC" prefix so PostgreSQL can parse timezone offsets (e.g. '21:00 UTC-7' -> '21:00 -7')
+    cleaned_time := replace(match_time, 'UTC', '');
+
     BEGIN
-        match_datetime := (match_date || ' ' || COALESCE(match_time, '00:00'))::TIMESTAMPTZ;
+        match_datetime := (match_date || ' ' || COALESCE(cleaned_time, '00:00'))::TIMESTAMPTZ;
     EXCEPTION WHEN OTHERS THEN
         match_datetime := (match_date || ' 00:00')::TIMESTAMPTZ;
     END;
 
-    RETURN NOW() > match_datetime + INTERVAL '2 hours';
+    RETURN NOW() > match_datetime;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

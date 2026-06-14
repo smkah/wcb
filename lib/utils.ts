@@ -48,3 +48,49 @@ export function parseMatchDateTime(dateStr: string, timeStr: string): Date {
   return new Date(isoString);
 }
 
+export function normalizeTeamName(name: string): string {
+  if (!name) return '';
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+export function getBrazilDateTime(dateStr: string, timeStr: string): { date: string, time: string } {
+  if (!dateStr) return { date: '', time: '' };
+  
+  const dateObj = parseMatchDateTime(dateStr, timeStr);
+  
+  const optionsDate: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  };
+  
+  const optionsTime: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  };
+
+  const formatterDate = new Intl.DateTimeFormat('en-CA', optionsDate);
+  const formatterTime = new Intl.DateTimeFormat('pt-BR', optionsTime);
+
+  const formattedDate = formatterDate.format(dateObj);
+  const formattedTime = formatterTime.format(dateObj);
+
+  return { date: formattedDate, time: formattedTime };
+}
+
+export function mapMatchesToBrazil(matches: any[]): any[] {
+  if (!matches) return [];
+  return matches.map(m => {
+    const { date: brDate, time: brTime } = getBrazilDateTime(m.date, m.time);
+    return {
+      ...m,
+      date: brDate,
+      time: `${brTime} UTC-3`
+    };
+  });
+}
+
+
