@@ -45,7 +45,7 @@ export default function Dashboard() {
   
   // Today's matches states
   const [todayMatches, setTodayMatches] = useState<any[]>([]);
-  const [todayGuesses, setTodayGuesses] = useState<Record<string, { score1: string, score2: string, yellow_cards_winner?: string, has_red_card?: boolean }>>({});
+  const [todayGuesses, setTodayGuesses] = useState<Record<string, { score1: string, score2: string, yellow_cards_winner?: string, has_red_card?: boolean, points_earned?: number }>>({});
   const [savingTodayGuess, setSavingTodayGuess] = useState<Record<string, boolean>>({});
   const [savedTodayGuess, setSavedTodayGuess] = useState<Record<string, boolean>>({});
   const [accuracyStats, setAccuracyStats] = useState<{
