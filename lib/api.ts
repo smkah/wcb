@@ -231,12 +231,17 @@ export const adminApi = {
   },
 
   async syncInitialMatches() {
-    // Check if matches already exist
-    const { count } = await supabase.from('matches').select('*', { count: 'exact', head: true });
-    
-    if (count === 0) {
-      const { error } = await supabase.from('matches').insert(
-        WORLD_CUP_DATA.matches.map(m => ({
+    const { data: dbMatches, error: fetchError } = await supabase.from('matches').select('id, date, time, ground');
+    if (fetchError) throw fetchError;
+
+    const dbMatchesMap = new Map(dbMatches?.map(m => [m.id, m]));
+    const updates = [];
+    const inserts = [];
+
+    for (const m of WORLD_CUP_DATA.matches) {
+      const dbMatch = dbMatchesMap.get(m.id);
+      if (!dbMatch) {
+        inserts.push({
           id: m.id,
           team1: m.team1,
           team2: m.team2,
@@ -245,12 +250,31 @@ export const adminApi = {
           group: m.group || null,
           round: m.round,
           ground: m.ground
-        }))
-      );
-      if (error) throw error;
-      return true;
+        });
+      } else if (dbMatch.date !== m.date || dbMatch.time !== m.time || dbMatch.ground !== m.ground) {
+        updates.push({
+          id: m.id,
+          date: m.date,
+          time: m.time,
+          ground: m.ground
+        });
+      }
     }
-    return false;
+
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('matches').insert(inserts);
+      if (error) throw error;
+    }
+
+    for (const update of updates) {
+      const { error } = await supabase
+        .from('matches')
+        .update({ date: update.date, time: update.time, ground: update.ground })
+        .eq('id', update.id);
+      if (error) throw error;
+    }
+
+    return true;
   },
 
   async simulateResults() {
