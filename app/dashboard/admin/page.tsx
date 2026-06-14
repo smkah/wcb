@@ -13,6 +13,45 @@ import { formatMatchDate, formatMatchTime } from '@/lib/utils';
 
 type TabType = 'overview' | 'users' | 'groups' | 'matches' | 'standings';
 
+const getPhaseName = (round: string, group?: string) => {
+  const r = round.toLowerCase();
+  if (r.includes('matchday') || group) {
+    return "FASE DE GRUPOS";
+  }
+  if (r.includes('16-avos') || r.includes('32')) {
+    return "16-AVOS DE FINAL";
+  }
+  if (r.includes('oitavas') || r.includes('16')) {
+    return "OITAVAS DE FINAL";
+  }
+  if (r.includes('quartas') || r.includes('quarter')) {
+    return "QUARTAS DE FINAL";
+  }
+  if (r.includes('semifinal') || r.includes('semi')) {
+    return "SEMIFINAIS";
+  }
+  if (r.includes('3º') || r.includes('terceiro') || r.includes('third')) {
+    return "DISPUTA DO 3º LUGAR";
+  }
+  if (r.includes('final')) {
+    return "FINAL";
+  }
+  return round.toUpperCase();
+};
+
+const getFormattedDateHeader = (dateStr: string) => {
+  if (!dateStr || dateStr === 'Sem Data') return 'Sem Data';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  const weekdays = ['DOMINGO', 'SEGUNDA-FEIRA', 'TERÇA-FEIRA', 'QUARTA-FEIRA', 'QUINTA-FEIRA', 'SEXTA-FEIRA', 'SÁBADO'];
+  const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+  const weekday = weekdays[date.getDay()];
+  const monthName = months[date.getMonth()];
+  return `${weekday}, ${parseInt(day, 10)} DE ${monthName}`;
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -153,44 +192,7 @@ export default function AdminPage() {
     checkUser();
   }, [router]);
 
-  const getPhaseName = (round: string, group?: string) => {
-    const r = round.toLowerCase();
-    if (r.includes('matchday') || group) {
-      return "FASE DE GRUPOS";
-    }
-    if (r.includes('16-avos') || r.includes('32')) {
-      return "16-AVOS DE FINAL";
-    }
-    if (r.includes('oitavas') || r.includes('16')) {
-      return "OITAVAS DE FINAL";
-    }
-    if (r.includes('quartas') || r.includes('quarter')) {
-      return "QUARTAS DE FINAL";
-    }
-    if (r.includes('semifinal') || r.includes('semi')) {
-      return "SEMIFINAIS";
-    }
-    if (r.includes('3º') || r.includes('terceiro') || r.includes('third')) {
-      return "DISPUTA DO 3º LUGAR";
-    }
-    if (r.includes('final')) {
-      return "FINAL";
-    }
-    return round.toUpperCase();
-  };
 
-  const getFormattedDateHeader = (dateStr: string) => {
-    if (!dateStr || dateStr === 'Sem Data') return 'Sem Data';
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    const [year, month, day] = parts;
-    const date = new Date(Number(year), Number(month) - 1, Number(day));
-    const weekdays = ['DOMINGO', 'SEGUNDA-FEIRA', 'TERÇA-FEIRA', 'QUARTA-FEIRA', 'QUINTA-FEIRA', 'SEXTA-FEIRA', 'SÁBADO'];
-    const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
-    const weekday = weekdays[date.getDay()];
-    const monthName = months[date.getMonth()];
-    return `${weekday}, ${parseInt(day, 10)} DE ${monthName}`;
-  };
 
   const phaseTotalMatches = React.useMemo(() => {
     const counts: Record<string, number> = {};
