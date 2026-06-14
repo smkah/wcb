@@ -31,6 +31,67 @@ export default function AdminPage() {
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [allGuesses, setAllGuesses] = useState<any[]>([]);
 
+  const [matchGroupBy, setMatchGroupBy] = useState<'date' | 'phase'>('date');
+
+  const groupedMatchesByDate = React.useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    data.matches.forEach(m => {
+      const date = m.date || 'Sem Data';
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(m);
+    });
+    
+    // Sort matches inside each group by time
+    Object.keys(groups).forEach(date => {
+      groups[date].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    });
+    
+    return groups;
+  }, [data.matches]);
+
+  const sortedMatchDates = React.useMemo(() => {
+    return Object.keys(groupedMatchesByDate).sort();
+  }, [groupedMatchesByDate]);
+
+  const groupedMatchesByPhase = React.useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    data.matches.forEach(m => {
+      const phase = getPhaseName(m.round, m.group);
+      if (!groups[phase]) groups[phase] = [];
+      groups[phase].push(m);
+    });
+    
+    // Sort matches inside each group by date/time
+    Object.keys(groups).forEach(phase => {
+      groups[phase].sort((a, b) => {
+        if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+        return (a.time || '').localeCompare(b.time || '');
+      });
+    });
+    
+    return groups;
+  }, [data.matches]);
+
+  const sortedMatchPhases = React.useMemo(() => {
+    const phaseOrder = [
+      "FASE DE GRUPOS",
+      "16-AVOS DE FINAL",
+      "OITAVAS DE FINAL",
+      "QUARTAS DE FINAL",
+      "SEMIFINAIS",
+      "DISPUTA DO 3º LUGAR",
+      "FINAL"
+    ];
+    return Object.keys(groupedMatchesByPhase).sort((a, b) => {
+      const idxA = phaseOrder.indexOf(a);
+      const idxB = phaseOrder.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [groupedMatchesByPhase]);
+
   // Modal states
   const [editingItem, setEditingItem] = useState<{ type: TabType | 'add_user' | 'add_match' | 'add_group', data: any } | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
@@ -116,6 +177,19 @@ export default function AdminPage() {
       return "FINAL";
     }
     return round.toUpperCase();
+  };
+
+  const getFormattedDateHeader = (dateStr: string) => {
+    if (!dateStr || dateStr === 'Sem Data') return 'Sem Data';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    const weekdays = ['DOMINGO', 'SEGUNDA-FEIRA', 'TERÇA-FEIRA', 'QUARTA-FEIRA', 'QUINTA-FEIRA', 'SEXTA-FEIRA', 'SÁBADO'];
+    const months = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+    const weekday = weekdays[date.getDay()];
+    const monthName = months[date.getMonth()];
+    return `${weekday}, ${parseInt(day, 10)} DE ${monthName}`;
   };
 
   const phaseTotalMatches = React.useMemo(() => {
@@ -978,7 +1052,27 @@ export default function AdminPage() {
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
                 <h2 className="text-2xl font-black uppercase tracking-tighter">JOGOS DA COPA</h2>
-                <div className="flex flex-wrap gap-2 sm:gap-4">
+                <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
+                  {/* Grouping Toggle */}
+                  <div className="flex bg-slate-900/50 p-1 rounded-xl border border-slate-800">
+                    <button
+                      onClick={() => setMatchGroupBy('date')}
+                      className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                        matchGroupBy === 'date' ? 'bg-emerald-500 text-slate-900 shadow' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Por Data
+                    </button>
+                    <button
+                      onClick={() => setMatchGroupBy('phase')}
+                      className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                        matchGroupBy === 'phase' ? 'bg-emerald-500 text-slate-900 shadow' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Por Fase
+                    </button>
+                  </div>
+
                   <button onClick={handleSyncMatches} className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
                     <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> Recarregar
                   </button>
@@ -988,8 +1082,8 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                {data.matches.map(m => (
+              {(() => {
+                const renderMatchRow = (m: any) => (
                   <div key={m.id} className="flex flex-col md:flex-row items-center justify-between p-6 bg-slate-900/50 rounded-2xl border border-slate-800 group hover:border-amber-500/30 transition-all gap-6">
                     <div className="flex items-center gap-6 flex-1">
                       <div className="text-center min-w-[60px]">
@@ -999,9 +1093,9 @@ export default function AdminPage() {
                       <div className="flex items-center gap-4 flex-1">
                         <span className="font-black text-sm uppercase flex-1 text-right truncate">{m.team1}</span>
                         <div className="flex items-center gap-2">
-                           <input type="text" value={m.score1 || ''} className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none" readOnly />
+                           <input type="text" value={m.score1 !== null && m.score1 !== undefined ? m.score1 : ''} className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none" readOnly />
                            <span className="text-slate-700 italic">X</span>
-                           <input type="text" value={m.score2 || ''} className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none" readOnly />
+                           <input type="text" value={m.score2 !== null && m.score2 !== undefined ? m.score2 : ''} className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none" readOnly />
                         </div>
                         <span className="font-black text-sm uppercase flex-1 truncate">{m.team2}</span>
                       </div>
@@ -1011,15 +1105,57 @@ export default function AdminPage() {
                        <button onClick={() => setEditingItem({ type: 'matches', data: m })} className="p-3 text-slate-500 hover:text-white"><Edit size={18} /></button>
                     </div>
                   </div>
-                ))}
-                {data.matches.length === 0 && (
-                  <div className="py-20 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-[32px]">
-                    <AlertTriangle size={48} className="mx-auto mb-4 text-amber-500/50" />
-                    <p className="text-xs font-black uppercase tracking-[0.2em] mb-6">Tabela de jogos vazia</p>
-                    <button onClick={handleSyncMatches} className="px-8 py-4 bg-emerald-500 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest">Sincronizar Dados Iniciais</button>
+                );
+
+                return (
+                  <div className="space-y-12">
+                    {matchGroupBy === 'date' ? (
+                      sortedMatchDates.map(dateStr => {
+                        const matchesList = groupedMatchesByDate[dateStr];
+                        const header = getFormattedDateHeader(dateStr);
+                        return (
+                          <div key={dateStr} className="space-y-4">
+                            <div className="flex items-center gap-4">
+                              <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                                {header}
+                              </span>
+                              <div className="h-px flex-1 bg-slate-800/40" />
+                            </div>
+                            <div className="space-y-4">
+                              {matchesList.map(renderMatchRow)}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      sortedMatchPhases.map(phaseName => {
+                        const matchesList = groupedMatchesByPhase[phaseName];
+                        return (
+                          <div key={phaseName} className="space-y-4">
+                            <div className="flex items-center gap-4">
+                              <span className="px-4 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                                {phaseName}
+                              </span>
+                              <div className="h-px flex-1 bg-slate-800/40" />
+                            </div>
+                            <div className="space-y-4">
+                              {matchesList.map(renderMatchRow)}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+
+                    {data.matches.length === 0 && (
+                      <div className="py-20 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-[32px]">
+                        <AlertTriangle size={48} className="mx-auto mb-4 text-amber-500/50" />
+                        <p className="text-xs font-black uppercase tracking-[0.2em] mb-6">Tabela de jogos vazia</p>
+                        <button onClick={handleSyncMatches} className="px-8 py-4 bg-emerald-500 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest">Sincronizar Dados Iniciais</button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </motion.div>
           )}
 
