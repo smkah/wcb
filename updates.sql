@@ -148,10 +148,33 @@ USING (
 -- MIGRATION: Só permitir criar/editar/deletar palpites até o respectivo jogo começar.
 DROP POLICY IF EXISTS "Usuários podem criar/editar seus palpites" ON public.guesses;
 DROP POLICY IF EXISTS "Usuários podem criar/editar seus palpites antes do jogo começar" ON public.guesses;
+DROP POLICY IF EXISTS "Usuários podem criar seus palpites antes do jogo começar" ON public.guesses;
+DROP POLICY IF EXISTS "Usuários podem editar seus palpites antes do jogo começar" ON public.guesses;
+DROP POLICY IF EXISTS "Usuários podem deletar seus palpites antes do jogo começar" ON public.guesses;
 
-CREATE POLICY "Usuários podem criar/editar seus palpites antes do jogo começar" 
+CREATE POLICY "Usuários podem criar seus palpites antes do jogo começar" 
 ON public.guesses 
-FOR ALL 
+FOR INSERT 
+WITH CHECK (
+  (auth.uid() = profile_id OR is_admin())
+  AND (is_admin() OR NOT public.is_match_started(match_id))
+);
+
+CREATE POLICY "Usuários podem editar seus palpites antes do jogo começar" 
+ON public.guesses 
+FOR UPDATE 
+USING (
+  (auth.uid() = profile_id OR is_admin())
+  AND (is_admin() OR NOT public.is_match_started(match_id))
+)
+WITH CHECK (
+  (auth.uid() = profile_id OR is_admin())
+  AND (is_admin() OR NOT public.is_match_started(match_id))
+);
+
+CREATE POLICY "Usuários podem deletar seus palpites antes do jogo começar" 
+ON public.guesses 
+FOR DELETE 
 USING (
   (auth.uid() = profile_id OR is_admin())
   AND (is_admin() OR NOT public.is_match_started(match_id))
@@ -258,3 +281,116 @@ UPDATE public.guesses SET yellow_cards_winner = 'Croácia' WHERE yellow_cards_wi
 UPDATE public.guesses SET yellow_cards_winner = 'Camarões' WHERE yellow_cards_winner = 'Camaroes';
 UPDATE public.guesses SET yellow_cards_winner = 'Áustria' WHERE yellow_cards_winner = 'Austria';
 UPDATE public.guesses SET yellow_cards_winner = 'Panamá' WHERE yellow_cards_winner = 'Panama';
+
+-- MIGRATION: Centralizar conversão de data/hora corrigindo bug de parsing de timezone (UTC-3 POSIX sign reversal)
+CREATE OR REPLACE FUNCTION public.parse_match_datetime(p_date TEXT, p_time TEXT)
+RETURNS TIMESTAMPTZ AS $$
+DECLARE
+    cleaned_time TEXT;
+    match_datetime TIMESTAMPTZ;
+BEGIN
+    cleaned_time := replace(p_time, 'UTC', '');
+    BEGIN
+        match_datetime := (p_date || ' ' || COALESCE(cleaned_time, '00:00'))::TIMESTAMPTZ;
+    EXCEPTION WHEN OTHERS THEN
+        match_datetime := (p_date || ' 00:00')::TIMESTAMPTZ;
+    END;
+    RETURN match_datetime;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION public.is_match_started(p_match_id TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    match_date TEXT;
+    match_time TEXT;
+BEGIN
+    SELECT date, time INTO match_date, match_time
+    FROM public.matches
+    WHERE id = p_match_id;
+    
+    IF NOT FOUND THEN
+        RETURN FALSE;
+    END IF;
+
+    RETURN NOW() > public.parse_match_datetime(match_date, match_time);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION trigger_check_guess_deadline()
+RETURNS TRIGGER AS $$
+DECLARE
+    match_date TEXT;
+    match_time TEXT;
+    match_datetime TIMESTAMPTZ;
+BEGIN
+    -- Permitir que o Admin salve palpites mesmo após o início (se necessário para ajustes manuais)
+    IF is_admin() THEN
+        RETURN NEW;
+    END IF;
+
+    -- Permite atualizações se os palpites em si não mudaram (recalculando pontos, etc)
+    IF TG_OP = 'UPDATE' AND 
+       OLD.score1 = NEW.score1 AND 
+       OLD.score2 = NEW.score2 AND 
+       COALESCE(OLD.yellow_cards_winner, '') = COALESCE(NEW.yellow_cards_winner, '') AND 
+       COALESCE(OLD.has_red_card, false) = COALESCE(NEW.has_red_card, false) THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT date, time INTO match_date, match_time
+    FROM public.matches
+    WHERE id = NEW.match_id;
+    
+    IF FOUND THEN
+        match_datetime := public.parse_match_datetime(match_date, match_time);
+
+        IF NOW() > match_datetime + INTERVAL '2 hours' THEN
+            RAISE EXCEPTION 'Este jogo já encerrou (em andamento por mais de 2 horas). Não é permitido salvar palpites.';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION trigger_check_group_predictions_deadline()
+RETURNS TRIGGER AS $$
+DECLARE
+    deadline TIMESTAMPTZ;
+BEGIN
+    -- Permitir que o Admin gerencie palpites após o prazo
+    IF is_admin() THEN
+        RETURN NEW;
+    END IF;
+
+    -- Obter o encerramento do último jogo da segunda rodada (4 jogos de cada grupo A-L)
+    SELECT public.parse_match_datetime(date, time) + INTERVAL '2 hours' INTO deadline
+    FROM (
+        SELECT date, time, "group",
+               ROW_NUMBER() OVER(PARTITION BY "group" ORDER BY date, time) as rn
+        FROM public.matches
+        WHERE "group" IS NOT NULL
+    ) sub
+    WHERE rn <= 4
+    ORDER BY public.parse_match_datetime(date, time) DESC
+    LIMIT 1;
+
+    IF deadline IS NOT NULL AND NOW() > deadline THEN
+        RAISE EXCEPTION 'O prazo para palpites da fase de grupos já expirou (fim da segunda rodada).';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Normalização de Holanda para Países Baixos
+UPDATE public.matches SET team1 = 'Países Baixos' WHERE team1 = 'Holanda';
+UPDATE public.matches SET team2 = 'Países Baixos' WHERE team2 = 'Holanda';
+UPDATE public.group_predictions SET first_place = 'Países Baixos' WHERE first_place = 'Holanda';
+UPDATE public.group_predictions SET second_place = 'Países Baixos' WHERE second_place = 'Holanda';
+UPDATE public.group_predictions SET third_place = 'Países Baixos' WHERE third_place = 'Holanda';
+UPDATE public.guesses SET yellow_cards_winner = 'Países Baixos' WHERE yellow_cards_winner = 'Holanda';
+UPDATE public.group_results SET first_place = 'Países Baixos' WHERE first_place = 'Holanda';
+UPDATE public.group_results SET second_place = 'Países Baixos' WHERE second_place = 'Holanda';
+UPDATE public.group_results SET third_place = 'Países Baixos' WHERE third_place = 'Holanda';
+

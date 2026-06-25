@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldAlert, Users, Calendar, Settings, ChevronRight, Search, Trash2, Edit, RefreshCw, Plus, CheckCircle2, AlertTriangle, Trophy, Download, Upload } from 'lucide-react';
+import { ShieldAlert, Users, Calendar, Settings, ChevronRight, Search, Trash2, Edit, RefreshCw, Plus, CheckCircle2, AlertTriangle, Trophy, Download, Upload, Sparkles } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -69,6 +69,7 @@ export default function AdminPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [allGuesses, setAllGuesses] = useState<any[]>([]);
+  const [allGroupPredictions, setAllGroupPredictions] = useState<any[]>([]);
 
   const [matchGroupBy, setMatchGroupBy] = useState<'date' | 'phase'>('date');
 
@@ -146,7 +147,7 @@ export default function AdminPage() {
   const fetchAllData = async () => {
     if (!isSupabaseConfigured) return;
     try {
-      const [users, groups, matches, guessesRes] = await Promise.all([
+      const [users, groups, matches, guessesRes, groupPredsRes] = await Promise.all([
         adminApi.getUsers().catch(e => { 
           console.error("Users fetch error:", e?.message || e); 
           return []; 
@@ -159,11 +160,13 @@ export default function AdminPage() {
           console.error("Matches fetch error:", e?.message || e); 
           return []; 
         }),
-        supabase.from('guesses').select('profile_id, match_id, score1, score2').then(res => res.data || [])
+        supabase.from('guesses').select('profile_id, match_id, score1, score2').then(res => res.data || []),
+        supabase.from('group_predictions').select('profile_id, group_letter').then(res => res.data || [])
       ]);
-      console.log("Fetched admin data:", { usersCount: users.length, groupsCount: groups.length, matchesCount: matches.length, guessesCount: guessesRes.length });
+      console.log("Fetched admin data:", { usersCount: users.length, groupsCount: groups.length, matchesCount: matches.length, guessesCount: guessesRes.length, groupPredsCount: groupPredsRes.length });
       setData({ users: users || [], groups: groups || [], matches: mapMatchesToBrazil(matches || []) });
       setAllGuesses(guessesRes || []);
+      setAllGroupPredictions(groupPredsRes || []);
     } catch (error) {
       console.error("Error fetching admin data:", error);
     } finally {
@@ -251,6 +254,8 @@ export default function AdminPage() {
       setIsSyncing(false);
     }
   };
+
+
 
   const handleDeleteUser = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este usuário?")) return;
@@ -455,6 +460,10 @@ export default function AdminPage() {
       }
     });
     return completedCounts;
+  };
+
+  const getUserGroupPredictionsCount = (profileId: string) => {
+    return allGroupPredictions.filter(p => p.profile_id === profileId).length;
   };
 
   return (
@@ -919,6 +928,7 @@ export default function AdminPage() {
                       </div>
                       <span className="font-bold text-xs uppercase tracking-widest text-left">Simular Resultados</span>
                     </button>
+
                     <button 
                       onClick={handleExportGuesses}
                       disabled={isSyncing}
@@ -1000,6 +1010,22 @@ export default function AdminPage() {
                         <div>
                           <p className="font-black text-white">{u.full_name || 'Sem Nome'}</p>
                           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{u.email}</p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(() => {
+                              const groupPredsCount = getUserGroupPredictionsCount(u.id);
+                              return (
+                                <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${
+                                  groupPredsCount === 12 
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                    : groupPredsCount > 0
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                      : 'bg-slate-950 text-slate-500 border-slate-800'
+                                }`}>
+                                  Classificação de Grupo: {groupPredsCount}/12 Grupos
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-12">

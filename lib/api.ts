@@ -416,5 +416,146 @@ export const adminApi = {
     if (recalcError) {
       console.warn("Could not auto-recalculate points on import:", recalcError.message);
     }
+  },
+
+  async autocompleteGroupPredictions() {
+    const { data: matches, error: matchesErr } = await supabase
+      .from('matches')
+      .select('id, team1, team2, score1, score2, group')
+      .order('date', { ascending: true })
+      .order('time', { ascending: true });
+    if (matchesErr) throw matchesErr;
+
+    const { data: profiles, error: profilesErr } = await supabase
+      .from('profiles')
+      .select('id');
+    if (profilesErr) throw profilesErr;
+
+    const { data: guesses, error: guessesErr } = await supabase
+      .from('guesses')
+      .select('profile_id, match_id, score1, score2');
+    if (guessesErr) throw guessesErr;
+
+    const groupMatches = matches.filter(m => m.group);
+    const guessesMap = new Map<string, any[]>();
+    guesses.forEach(g => {
+      if (!guessesMap.has(g.profile_id)) {
+        guessesMap.set(g.profile_id, []);
+      }
+      guessesMap.get(g.profile_id)!.push(g);
+    });
+
+    const allGroupPredictions: any[] = [];
+
+    for (const p of profiles) {
+      const userGuesses = guessesMap.get(p.id) || [];
+      const userGuessesMap = new Map(userGuesses.map(g => [g.match_id, g]));
+      const groupsList = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+      const userThirdPlaces: any[] = [];
+
+      for (const groupLetter of groupsList) {
+        const matchesInGroup = groupMatches.filter(m => m.group === groupLetter);
+        const teamsStats: Record<string, { name: string, points: number, gd: number, gs: number }> = {};
+
+        const initTeam = (name: string) => {
+          if (!teamsStats[name]) {
+            teamsStats[name] = { name, points: 0, gd: 0, gs: 0 };
+          }
+        };
+
+        matchesInGroup.forEach(m => {
+          initTeam(m.team1);
+          initTeam(m.team2);
+
+          let score1 = m.score1;
+          let score2 = m.score2;
+
+          if (score1 === null || score2 === null) {
+            const userGuess = userGuessesMap.get(m.id);
+            if (userGuess && userGuess.score1 !== null && userGuess.score2 !== null) {
+              score1 = userGuess.score1;
+              score2 = userGuess.score2;
+            }
+          }
+
+          if (score1 !== null && score2 !== null) {
+            teamsStats[m.team1].gs += score1;
+            teamsStats[m.team2].gs += score2;
+            teamsStats[m.team1].gd += (score1 - score2);
+            teamsStats[m.team2].gd += (score2 - score1);
+
+            if (score1 > score2) {
+              teamsStats[m.team1].points += 3;
+            } else if (score2 > score1) {
+              teamsStats[m.team2].points += 3;
+            } else {
+              teamsStats[m.team1].points += 1;
+              teamsStats[m.team2].points += 1;
+            }
+          }
+        });
+
+        const sortedTeams = Object.values(teamsStats).sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.gd !== a.gd) return b.gd - a.gd;
+          if (b.gs !== a.gs) return b.gs - a.gs;
+          return a.name.localeCompare(b.name);
+        });
+
+        const getTeamAt = (idx: number) => sortedTeams[idx]?.name || '';
+
+        const firstPlace = getTeamAt(0);
+        const secondPlace = getTeamAt(1);
+        const thirdPlace = getTeamAt(2);
+
+        allGroupPredictions.push({
+          profile_id: p.id,
+          group_letter: groupLetter,
+          first_place: firstPlace,
+          second_place: secondPlace,
+          third_place: thirdPlace,
+          third_place_qualified: false
+        });
+
+        if (thirdPlace) {
+          userThirdPlaces.push({
+            profile_id: p.id,
+            group_letter: groupLetter,
+            team_name: thirdPlace,
+            points: teamsStats[thirdPlace]?.points || 0,
+            gd: teamsStats[thirdPlace]?.gd || 0,
+            gs: teamsStats[thirdPlace]?.gs || 0
+          });
+        }
+      }
+
+      userThirdPlaces.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.gd !== a.gd) return b.gd - a.gd;
+        if (b.gs !== a.gs) return b.gs - a.gs;
+        return a.team_name.localeCompare(b.team_name);
+      });
+
+      const qualifiedThirds = new Set(userThirdPlaces.slice(0, 8).map(t => `${t.group_letter}_${t.team_name}`));
+
+      allGroupPredictions.forEach(gp => {
+        if (gp.profile_id === p.id && gp.third_place && qualifiedThirds.has(`${gp.group_letter}_${gp.third_place}`)) {
+          gp.third_place_qualified = true;
+        }
+      });
+    }
+
+    if (allGroupPredictions.length > 0) {
+      const { error: upsertErr } = await supabase
+        .from('group_predictions')
+        .upsert(allGroupPredictions, { onConflict: 'profile_id,group_letter' });
+      if (upsertErr) throw upsertErr;
+
+      const { error: recalcError } = await supabase.rpc('recalculate_all_user_points');
+      if (recalcError) {
+        console.error("Autocomplete group predictions points recalculation failed:", recalcError.message);
+      }
+    }
+    return true;
   }
 };
