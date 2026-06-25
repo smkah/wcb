@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldAlert, Users, Calendar, Settings, ChevronRight, Search, Trash2, Edit, RefreshCw, Plus, CheckCircle2, AlertTriangle, Trophy, Download, Upload, Sparkles } from 'lucide-react';
+import { ShieldAlert, Users, Calendar, Settings, ChevronRight, Search, Trash2, Edit, RefreshCw, Plus, CheckCircle2, AlertTriangle, Trophy, Download, Upload, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -72,10 +72,26 @@ export default function AdminPage() {
   const [allGroupPredictions, setAllGroupPredictions] = useState<any[]>([]);
 
   const [matchGroupBy, setMatchGroupBy] = useState<'date' | 'phase'>('date');
+  const [hideFinishedMatches, setHideFinishedMatches] = useState<boolean>(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  const toggleSectionCollapse = (section: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  const visibleMatches = React.useMemo(() => {
+    if (hideFinishedMatches) {
+      return data.matches.filter(m => m.score1 === null || m.score2 === null);
+    }
+    return data.matches;
+  }, [data.matches, hideFinishedMatches]);
 
   const groupedMatchesByDate = React.useMemo(() => {
     const groups: Record<string, any[]> = {};
-    data.matches.forEach(m => {
+    visibleMatches.forEach(m => {
       const date = m.date || 'Sem Data';
       if (!groups[date]) groups[date] = [];
       groups[date].push(m);
@@ -87,7 +103,7 @@ export default function AdminPage() {
     });
     
     return groups;
-  }, [data.matches]);
+  }, [visibleMatches]);
 
   const sortedMatchDates = React.useMemo(() => {
     return Object.keys(groupedMatchesByDate).sort();
@@ -95,7 +111,7 @@ export default function AdminPage() {
 
   const groupedMatchesByPhase = React.useMemo(() => {
     const groups: Record<string, any[]> = {};
-    data.matches.forEach(m => {
+    visibleMatches.forEach(m => {
       const phase = getPhaseName(m.round, m.group);
       if (!groups[phase]) groups[phase] = [];
       groups[phase].push(m);
@@ -110,7 +126,7 @@ export default function AdminPage() {
     });
     
     return groups;
-  }, [data.matches]);
+  }, [visibleMatches]);
 
   const sortedMatchPhases = React.useMemo(() => {
     const phaseOrder = [
@@ -1108,6 +1124,19 @@ export default function AdminPage() {
                     </button>
                   </div>
 
+                  {/* Hide Finished Toggle */}
+                  <button
+                    onClick={() => setHideFinishedMatches(!hideFinishedMatches)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${
+                      hideFinishedMatches
+                        ? 'bg-red-500/10 text-red-400 border-red-500/20 shadow'
+                        : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    {hideFinishedMatches ? <EyeOff size={12} /> : <Eye size={12} />}
+                    {hideFinishedMatches ? 'Ocultando Finalizados' : 'Ocultar Finalizados'}
+                  </button>
+
                   <button onClick={handleSyncMatches} className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
                     <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} /> Recarregar
                   </button>
@@ -1144,38 +1173,92 @@ export default function AdminPage() {
 
                 return (
                   <div className="space-y-12">
-                    {matchGroupBy === 'date' ? (
+                    {visibleMatches.length === 0 ? (
+                      <div className="py-20 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-[32px]">
+                        <Calendar size={48} className="mx-auto mb-4 text-emerald-500/50 animate-pulse" />
+                        <p className="text-xs font-black uppercase tracking-[0.2em] mb-2">Nenhum jogo pendente</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                          {hideFinishedMatches ? 'Todos os jogos cadastrados foram finalizados!' : 'Tabela de jogos vazia'}
+                        </p>
+                      </div>
+                    ) : matchGroupBy === 'date' ? (
                       sortedMatchDates.map(dateStr => {
                         const matchesList = groupedMatchesByDate[dateStr];
+                        if (!matchesList || matchesList.length === 0) return null;
                         const header = getFormattedDateHeader(dateStr);
+                        const isCollapsed = collapsedSections[dateStr];
                         return (
                           <div key={dateStr} className="space-y-4">
-                            <div className="flex items-center gap-4">
-                              <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                            <div 
+                              onClick={() => toggleSectionCollapse(dateStr)}
+                              className="flex items-center gap-4 cursor-pointer select-none group"
+                            >
+                              <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest rounded-xl group-hover:bg-emerald-500/25 transition-colors">
                                 {header}
                               </span>
-                              <div className="h-px flex-1 bg-slate-800/40" />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                ({isCollapsed ? 'Ocultado' : `${matchesList.length} jogos`})
+                              </span>
+                              <div className="h-px flex-1 bg-slate-800/40 group-hover:bg-emerald-500/20 transition-colors" />
+                              <button
+                                type="button"
+                                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[9px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
+                              >
+                                {isCollapsed ? 'Expandir' : 'Minimizar'}
+                              </button>
                             </div>
-                            <div className="space-y-4">
-                              {matchesList.map(renderMatchRow)}
-                            </div>
+                            <AnimatePresence initial={false}>
+                              {!isCollapsed && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="space-y-4 overflow-hidden"
+                                >
+                                  {matchesList.map(renderMatchRow)}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         );
                       })
                     ) : (
                       sortedMatchPhases.map(phaseName => {
                         const matchesList = groupedMatchesByPhase[phaseName];
+                        if (!matchesList || matchesList.length === 0) return null;
+                        const isCollapsed = collapsedSections[phaseName];
                         return (
                           <div key={phaseName} className="space-y-4">
-                            <div className="flex items-center gap-4">
-                              <span className="px-4 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest rounded-xl">
+                            <div 
+                              onClick={() => toggleSectionCollapse(phaseName)}
+                              className="flex items-center gap-4 cursor-pointer select-none group"
+                            >
+                              <span className="px-4 py-1.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest rounded-xl group-hover:bg-cyan-500/25 transition-colors">
                                 {phaseName}
                               </span>
-                              <div className="h-px flex-1 bg-slate-800/40" />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                ({isCollapsed ? 'Ocultado' : `${matchesList.length} jogos`})
+                              </span>
+                              <div className="h-px flex-1 bg-slate-800/40 group-hover:bg-cyan-500/20 transition-colors" />
+                              <button
+                                type="button"
+                                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[9px] font-black uppercase tracking-wider transition-colors border border-slate-800/50 rounded-lg cursor-pointer"
+                              >
+                                {isCollapsed ? 'Expandir' : 'Minimizar'}
+                              </button>
                             </div>
-                            <div className="space-y-4">
-                              {matchesList.map(renderMatchRow)}
-                            </div>
+                            <AnimatePresence initial={false}>
+                              {!isCollapsed && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="space-y-4 overflow-hidden"
+                                >
+                                  {matchesList.map(renderMatchRow)}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         );
                       })

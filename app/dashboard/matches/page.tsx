@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Filter, Save, Loader2, CheckCircle2, LayoutGrid, List as ListIcon, Edit2, LayoutList, RefreshCw, History, BarChart2 } from 'lucide-react';
+import { Calendar, Filter, Save, Loader2, CheckCircle2, LayoutGrid, List as ListIcon, Edit2, LayoutList, RefreshCw, History, BarChart2, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import Flag from 'react-world-flags';
 import { supabase } from '@/lib/supabase';
@@ -27,6 +27,7 @@ export default function MatchesPage() {
   const [userGroups, setUserGroups] = useState<any[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<'matches' | 'standings'>('matches');
   const [groupBy, setGroupBy] = useState<'phase' | 'date'>('date');
+  const [hideFinished, setHideFinished] = useState<boolean>(false);
   const [groupPredictions, setGroupPredictions] = useState<Record<string, { firstPlace: string, secondPlace: string, thirdPlace: string, thirdPlaceQualified: boolean }>>({});
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [groupResults, setGroupResults] = useState<any[]>([]);
@@ -213,7 +214,11 @@ export default function MatchesPage() {
     "FINAL"
   ];
 
-  const groupedMatches = matches.reduce((acc, match) => {
+  const visibleMatches = hideFinished
+    ? matches.filter(m => m.score1 === null || m.score2 === null)
+    : matches;
+
+  const groupedMatches = visibleMatches.reduce((acc, match) => {
     const phase = getPhaseName(match.round, match.group);
     if (!acc[phase]) acc[phase] = [];
     acc[phase].push(match);
@@ -264,7 +269,7 @@ export default function MatchesPage() {
     }));
   };
 
-  const groupedByDate = matches.reduce((acc, match) => {
+  const groupedByDate = visibleMatches.reduce((acc, match) => {
     const date = match.date || 'Sem Data';
     if (!acc[date]) acc[date] = [];
     acc[date].push(match);
@@ -1356,37 +1361,60 @@ export default function MatchesPage() {
             </div>
 
             {activeSubTab === 'matches' && (
-              <div className="flex items-center gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-3">
-                  Agrupar por:
-                </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 px-3">
+                    Agrupar por:
+                  </span>
+                  <button
+                    onClick={() => setGroupBy('phase')}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${groupBy === 'phase'
+                      ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                      : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                  >
+                    Fases
+                  </button>
+                  <button
+                    onClick={() => setGroupBy('date')}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${groupBy === 'date'
+                      ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                      : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                  >
+                    Datas
+                  </button>
+                </div>
+
                 <button
-                  onClick={() => setGroupBy('phase')}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${groupBy === 'phase'
-                    ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
-                    : 'text-slate-500 hover:text-slate-300'
-                    }`}
+                  onClick={() => setHideFinished(!hideFinished)}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                    hideFinished
+                      ? 'bg-red-500/10 text-red-400 border-red-500/20 shadow-lg shadow-red-500/5'
+                      : 'bg-slate-900/50 text-slate-500 border-slate-700/50 hover:text-slate-300 hover:border-slate-500/30'
+                  }`}
                 >
-                  Fases
-                </button>
-                <button
-                  onClick={() => setGroupBy('date')}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${groupBy === 'date'
-                    ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
-                    : 'text-slate-500 hover:text-slate-300'
-                    }`}
-                >
-                  Datas
+                  {hideFinished ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {hideFinished ? 'Ocultando Finalizados' : 'Ocultar Finalizados'}
                 </button>
               </div>
             )}
           </div>
 
           {activeSubTab === 'matches' ? (
-            groupBy === 'phase' ? (
+            visibleMatches.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 glass rounded-[32px] border-dashed border-slate-700/50 text-center w-full">
+                <Calendar className="text-slate-600 mb-4 animate-pulse" size={48} />
+                <h3 className="text-lg font-black uppercase text-white tracking-wide">Nenhuma partida encontrada</h3>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
+                  {hideFinished ? 'Todas as partidas foram finalizadas!' : 'Não há partidas cadastradas.'}
+                </p>
+              </div>
+            ) : groupBy === 'phase' ? (
               <div className="space-y-20">
                 {sortedPhases.map((round, sectionIdx) => {
                   const roundMatches = groupedMatches[round];
+                  if (!roundMatches || roundMatches.length === 0) return null;
                   const isCollapsed = collapsedPhases[round];
                   const totalCount = roundMatches.length;
                   const guessedCount = roundMatches.filter((m: any) => {
@@ -1497,6 +1525,7 @@ export default function MatchesPage() {
               <div className="space-y-20">
                 {sortedDates.map((dateStr, sectionIdx) => {
                   const dateMatches = groupedByDate[dateStr];
+                  if (!dateMatches || dateMatches.length === 0) return null;
                   const isCollapsed = collapsedPhases[dateStr];
                   const totalCount = dateMatches.length;
                   const guessedCount = dateMatches.filter((m: any) => {
