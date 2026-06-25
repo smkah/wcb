@@ -176,7 +176,7 @@ export default function MatchesPage() {
     return true;
   };
 
-  const isGroupLockedGlobal = !isAdmin && isGroupPredictionsLocked();
+  const isGroupLockedGlobal = isGroupPredictionsLocked();
 
   const getPhaseName = (round: string, group?: string) => {
     const r = round.toLowerCase();
@@ -631,7 +631,7 @@ export default function MatchesPage() {
       return;
     }
 
-    if (!isAdmin && isGroupPredictionsLocked()) {
+    if (isGroupPredictionsLocked()) {
       toast.error("O prazo para palpites da fase de grupos expirou (fim da segunda rodada)!");
       return;
     }
@@ -1652,7 +1652,7 @@ export default function MatchesPage() {
                   const pred = groupPredictions[groupLetter] || { firstPlace: '', secondPlace: '', thirdPlace: '', thirdPlaceQualified: false };
                   const actual = groupResults.find(r => r.group_letter === groupLetter);
                   const isSaving = savingGroup === groupLetter;
-                  const isGroupLocked = !isAdmin && isGroupPredictionsLocked();
+                  const isGroupLocked = isGroupPredictionsLocked();
 
                   return (
                     <motion.div
