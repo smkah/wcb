@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Filter, Save, Loader2, CheckCircle2, LayoutGrid, List as ListIcon, Edit2, LayoutList, RefreshCw, History, BarChart2, Eye, EyeOff } from 'lucide-react';
+import { Calendar, Filter, Save, Loader2, CheckCircle2, LayoutGrid, List as ListIcon, Edit2, LayoutList, RefreshCw, History, BarChart2, Eye, EyeOff, Lock } from 'lucide-react';
 import Image from 'next/image';
 import Flag from 'react-world-flags';
 import { supabase } from '@/lib/supabase';
@@ -173,10 +173,10 @@ export default function MatchesPage() {
   };
 
   const isGroupPredictionsLocked = () => {
-    const deadline = getGroupPredictionsDeadline();
-    if (!deadline) return false;
-    return new Date() > deadline;
+    return true;
   };
+
+  const isGroupLockedGlobal = !isAdmin && isGroupPredictionsLocked();
 
   const getPhaseName = (round: string, group?: string) => {
     const r = round.toLowerCase();
@@ -1636,6 +1636,14 @@ export default function MatchesPage() {
                     </div>
                   </div>
                 </div>
+                {isGroupLockedGlobal && (
+                  <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400">
+                    <Lock size={16} className="animate-pulse shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                      Prazo encerrado! Não é mais possível alterar os palpites de classificação dos grupos.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
