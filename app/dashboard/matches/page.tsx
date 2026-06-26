@@ -214,9 +214,108 @@ export default function MatchesPage() {
     "FINAL"
   ];
 
+  const resolvedMatches = React.useMemo(() => {
+    if (!matches || matches.length === 0) return [];
+    if (!groupResults || groupResults.length === 0) return matches;
+
+    const firstPlaceMap = new Map<string, string>();
+    const secondPlaceMap = new Map<string, string>();
+    const thirdPlaceMap = new Map<string, string>();
+    const qualifiedThirds: string[] = [];
+
+    groupResults.forEach(gr => {
+      const g = gr.group_letter;
+      if (gr.first_place) firstPlaceMap.set(g, gr.first_place);
+      if (gr.second_place) secondPlaceMap.set(g, gr.second_place);
+      if (gr.third_place) {
+        thirdPlaceMap.set(g, gr.third_place);
+        if (gr.third_place_qualified) {
+          qualifiedThirds.push(g);
+        }
+      }
+    });
+
+    let thirdPlaceAssignment: Record<string, string> = {};
+    if (qualifiedThirds.length === 8) {
+      const matchesWithThirds = [
+        { id: 'm74', allowed: ['A', 'B', 'C', 'D', 'F'] },
+        { id: 'm77', allowed: ['C', 'D', 'F', 'G', 'H'] },
+        { id: 'm79', allowed: ['C', 'E', 'F', 'H', 'I'] },
+        { id: 'm80', allowed: ['E', 'H', 'I', 'J', 'K'] },
+        { id: 'm81', allowed: ['B', 'E', 'F', 'I', 'J'] },
+        { id: 'm82', allowed: ['A', 'E', 'H', 'I', 'J'] },
+        { id: 'm85', allowed: ['E', 'F', 'G', 'I', 'J'] },
+        { id: 'm87', allowed: ['D', 'E', 'I', 'J', 'L'] }
+      ];
+
+      const assignment: Record<string, string> = {};
+      const usedMatches = new Set<string>();
+
+      const backtrack = (idx: number): boolean => {
+        if (idx === qualifiedThirds.length) return true;
+        const group = qualifiedThirds[idx];
+        for (const m of matchesWithThirds) {
+          if (!usedMatches.has(m.id) && m.allowed.includes(group)) {
+            assignment[m.id] = group;
+            usedMatches.add(m.id);
+            if (backtrack(idx + 1)) return true;
+            usedMatches.delete(m.id);
+            delete assignment[m.id];
+          }
+        }
+        return false;
+      };
+
+      qualifiedThirds.sort();
+      if (backtrack(0)) {
+        thirdPlaceAssignment = assignment;
+      }
+    }
+
+    return matches.map(m => {
+      const matchIdNum = parseInt(m.id.substring(1), 10);
+      if (m.round.includes('16-avos') || (matchIdNum >= 73 && matchIdNum <= 88)) {
+        let team1 = m.team1;
+        let team2 = m.team2;
+
+        const isPlaceholder = (t: string) => {
+          if (!t) return false;
+          if (t.match(/^[12][A-L]$/)) return true;
+          if (t.startsWith('3') && t.includes('/')) return true;
+          return false;
+        };
+
+        if (isPlaceholder(team1)) {
+          if (team1.startsWith('1')) {
+            const group = team1.substring(1);
+            team1 = firstPlaceMap.get(group) || team1;
+          } else if (team1.startsWith('2')) {
+            const group = team1.substring(1);
+            team1 = secondPlaceMap.get(group) || team1;
+          }
+        }
+
+        if (isPlaceholder(team2)) {
+          if (team2.startsWith('2')) {
+            const group = team2.substring(1);
+            team2 = secondPlaceMap.get(group) || team2;
+          } else if (team2.startsWith('3')) {
+            const assignedGroup = thirdPlaceAssignment[m.id];
+            if (assignedGroup) {
+              team2 = thirdPlaceMap.get(assignedGroup) || team2;
+            }
+          }
+        }
+
+        return { ...m, team1, team2 };
+      }
+      return m;
+    });
+  }, [matches, groupResults]);
+
   const visibleMatches = hideFinished
-    ? matches.filter(m => m.score1 === null || m.score2 === null)
-    : matches;
+    ? resolvedMatches.filter(m => m.score1 === null || m.score2 === null)
+    : resolvedMatches;
 
   const groupedMatches = visibleMatches.reduce((acc, match) => {
     const phase = getPhaseName(match.round, match.group);

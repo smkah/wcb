@@ -394,3 +394,211 @@ UPDATE public.group_results SET first_place = 'Países Baixos' WHERE first_place
 UPDATE public.group_results SET second_place = 'Países Baixos' WHERE second_place = 'Holanda';
 UPDATE public.group_results SET third_place = 'Países Baixos' WHERE third_place = 'Holanda';
 
+-- 9. Autopovoamento das Partidas dos 16-avos de final
+
+CREATE OR REPLACE FUNCTION find_third_place_matching(
+    p_group_index INT,
+    p_qualified_groups TEXT[],
+    p_used_matches TEXT[],
+    p_assignment TEXT[]
+) RETURNS TEXT[] AS $$
+DECLARE
+    v_group TEXT;
+    v_match_id TEXT;
+    v_allowed TEXT[];
+    v_res TEXT[];
+    v_matches RECORD;
+BEGIN
+    IF p_group_index > array_length(p_qualified_groups, 1) THEN
+        RETURN p_assignment;
+    END IF;
+    
+    v_group := p_qualified_groups[p_group_index];
+    
+    FOR v_matches IN 
+        SELECT m.id, m.allowed 
+        FROM (
+            VALUES 
+                ('m74', ARRAY['A', 'B', 'C', 'D', 'F']),
+                ('m77', ARRAY['C', 'D', 'F', 'G', 'H']),
+                ('m79', ARRAY['C', 'E', 'F', 'H', 'I']),
+                ('m80', ARRAY['E', 'H', 'I', 'J', 'K']),
+                ('m81', ARRAY['B', 'E', 'F', 'I', 'J']),
+                ('m82', ARRAY['A', 'E', 'H', 'I', 'J']),
+                ('m85', ARRAY['E', 'F', 'G', 'I', 'J']),
+                ('m87', ARRAY['D', 'E', 'I', 'J', 'L'])
+        ) m(id, allowed)
+    LOOP
+        IF NOT (v_matches.id = ANY(p_used_matches)) AND (v_group = ANY(v_matches.allowed)) THEN
+            v_res := find_third_place_matching(
+                p_group_index + 1,
+                p_qualified_groups,
+                p_used_matches || v_matches.id,
+                p_assignment || (v_matches.id || ':' || v_group)
+            );
+            IF v_res IS NOT NULL THEN
+                RETURN v_res;
+            END IF;
+        END IF;
+    END LOOP;
+    
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION populate_round_of_32()
+RETURNS VOID AS $$
+DECLARE
+    v_results RECORD;
+    v_third_place_assignment TEXT[];
+    v_assignment_parts TEXT[];
+    v_match_id TEXT;
+    v_assigned_group TEXT;
+    v_team_name TEXT;
+    v_i INT;
+BEGIN
+    -- Reset / Update match team names based on first/second places from group_results
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'E'), '1E')
+    WHERE id = 'm74';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'I'), '1I')
+    WHERE id = 'm77';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'A'), '1A')
+    WHERE id = 'm79';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'L'), '1L')
+    WHERE id = 'm80';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'D'), '1D')
+    WHERE id = 'm81';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'G'), '1G')
+    WHERE id = 'm82';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'B'), '1B')
+    WHERE id = 'm85';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'K'), '1K')
+    WHERE id = 'm87';
+
+    -- Runners-up
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'A'), '2A'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'B'), '2B')
+    WHERE id = 'm73';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'F'), '1F'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'C'), '2C')
+    WHERE id = 'm75';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'C'), '1C'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'F'), '2F')
+    WHERE id = 'm76';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'E'), '2E'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'I'), '2I')
+    WHERE id = 'm78';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'K'), '2K'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'L'), '2L')
+    WHERE id = 'm83';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'H'), '1H'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'J'), '2J')
+    WHERE id = 'm84';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT first_place FROM public.group_results WHERE group_letter = 'J'), '1J'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'H'), '2H')
+    WHERE id = 'm86';
+
+    UPDATE public.matches 
+    SET team1 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'D'), '2D'),
+        team2 = COALESCE((SELECT second_place FROM public.group_results WHERE group_letter = 'G'), '2G')
+    WHERE id = 'm88';
+
+    -- 2. Resolve third-place matchups if we have exactly 8 qualified third places
+    SELECT ARRAY_AGG(group_letter ORDER BY group_letter) 
+    INTO v_third_place_assignment
+    FROM public.group_results 
+    WHERE third_place_qualified = true AND third_place IS NOT NULL;
+    
+    IF array_length(v_third_place_assignment, 1) = 8 THEN
+        v_third_place_assignment := find_third_place_matching(1, v_third_place_assignment, ARRAY[]::TEXT[], ARRAY[]::TEXT[]);
+        
+        IF v_third_place_assignment IS NOT NULL THEN
+            FOR v_i IN 1..array_length(v_third_place_assignment, 1) LOOP
+                v_assignment_parts := string_to_array(v_third_place_assignment[v_i], ':');
+                v_match_id := v_assignment_parts[1];
+                v_assigned_group := v_assignment_parts[2];
+                
+                SELECT third_place INTO v_team_name 
+                FROM public.group_results 
+                WHERE group_letter = v_assigned_group;
+                
+                UPDATE public.matches 
+                SET team2 = COALESCE(v_team_name, '3rd ' || v_assigned_group) 
+                WHERE id = v_match_id;
+            END LOOP;
+        ELSE
+            -- Revert/Keep placeholders
+            UPDATE public.matches SET team2 = '3A/B/C/D/F' WHERE id = 'm74';
+            UPDATE public.matches SET team2 = '3C/D/F/G/H' WHERE id = 'm77';
+            UPDATE public.matches SET team2 = '3C/E/F/H/I' WHERE id = 'm79';
+            UPDATE public.matches SET team2 = '3E/H/I/J/K' WHERE id = 'm80';
+            UPDATE public.matches SET team2 = '3B/E/F/I/J' WHERE id = 'm81';
+            UPDATE public.matches SET team2 = '3A/E/H/I/J' WHERE id = 'm82';
+            UPDATE public.matches SET team2 = '3E/F/G/I/J' WHERE id = 'm85';
+            UPDATE public.matches SET team2 = '3D/E/I/J/L' WHERE id = 'm87';
+        END IF;
+    ELSE
+        -- Revert/Keep placeholders
+        UPDATE public.matches SET team2 = '3A/B/C/D/F' WHERE id = 'm74';
+        UPDATE public.matches SET team2 = '3C/D/F/G/H' WHERE id = 'm77';
+        UPDATE public.matches SET team2 = '3C/E/F/H/I' WHERE id = 'm79';
+        UPDATE public.matches SET team2 = '3E/H/I/J/K' WHERE id = 'm80';
+        UPDATE public.matches SET team2 = '3B/E/F/I/J' WHERE id = 'm81';
+        UPDATE public.matches SET team2 = '3A/E/H/I/J' WHERE id = 'm82';
+        UPDATE public.matches SET team2 = '3E/F/G/I/J' WHERE id = 'm85';
+        UPDATE public.matches SET team2 = '3D/E/I/J/L' WHERE id = 'm87';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Modify the trigger function to automatically populate round of 32
+CREATE OR REPLACE FUNCTION trigger_on_group_results_updated()
+RETURNS TRIGGER AS $$
+DECLARE
+    r RECORD;
+BEGIN
+    IF (OLD.first_place IS DISTINCT FROM NEW.first_place) OR 
+       (OLD.second_place IS DISTINCT FROM NEW.second_place) OR 
+       (OLD.third_place IS DISTINCT FROM NEW.third_place) OR 
+       (OLD.third_place_qualified IS DISTINCT FROM NEW.third_place_qualified) THEN
+       
+        -- Automatically populate matches
+        PERFORM public.populate_round_of_32();
+       
+        FOR r IN SELECT DISTINCT profile_id FROM public.group_predictions WHERE group_letter = NEW.group_letter LOOP
+            PERFORM recalculate_user_points(r.profile_id);
+        END LOOP;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+

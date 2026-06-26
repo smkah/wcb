@@ -32,7 +32,7 @@ export const adminApi = {
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false });
-    
+
     if (error) throw error;
     return data;
   },
@@ -42,7 +42,7 @@ export const adminApi = {
       .from('profiles')
       .delete()
       .eq('id', userId);
-    
+
     if (error) throw error;
   },
 
@@ -51,7 +51,7 @@ export const adminApi = {
       .from('profiles')
       .update(updates)
       .eq('id', userId);
-    
+
     if (error) throw error;
   },
 
@@ -59,7 +59,7 @@ export const adminApi = {
     const { error } = await supabase
       .from('group_members')
       .insert({ profile_id: profileId, group_id: groupId });
-    
+
     if (error) throw error;
   },
 
@@ -72,7 +72,7 @@ export const adminApi = {
         .select('id')
         .eq('id', user.id)
         .maybeSingle();
-      
+
       if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
 
       if (!profile) {
@@ -100,7 +100,7 @@ export const adminApi = {
       .from('groups')
       .select('*, profiles!groups_created_by_fkey(email, full_name)')
       .order('created_at', { ascending: false });
-    
+
     if (error) {
       console.error("Supabase getGroups error:", error);
       throw error;
@@ -113,7 +113,7 @@ export const adminApi = {
       .from('group_members')
       .select('*, profiles(id, email, full_name)')
       .eq('group_id', groupId);
-    
+
     if (error) throw error;
     return data;
   },
@@ -124,7 +124,7 @@ export const adminApi = {
       .delete()
       .eq('profile_id', profileId)
       .eq('group_id', groupId);
-    
+
     if (error) throw error;
   },
 
@@ -143,7 +143,7 @@ export const adminApi = {
       })
       .select()
       .single();
-    
+
     if (error) throw error;
 
     // Adicionar criador como membro automaticamente
@@ -159,7 +159,7 @@ export const adminApi = {
       .from('groups')
       .update(updates)
       .eq('id', groupId);
-    
+
     if (error) throw error;
   },
 
@@ -170,7 +170,7 @@ export const adminApi = {
         .from('group_members')
         .delete()
         .eq('group_id', groupId);
-      
+
       if (memberError) {
         console.warn("Could not delete group members proactively:", memberError.message);
       }
@@ -183,7 +183,7 @@ export const adminApi = {
       .from('groups')
       .delete()
       .eq('id', groupId);
-    
+
     if (groupError) {
       console.error("Error deleting group from Supabase:", groupError);
       throw groupError;
@@ -197,7 +197,7 @@ export const adminApi = {
       .select('*')
       .order('date', { ascending: true })
       .order('time', { ascending: true });
-    
+
     if (error) throw error;
     return data;
   },
@@ -208,7 +208,7 @@ export const adminApi = {
       .insert(matchData)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   },
@@ -218,7 +218,7 @@ export const adminApi = {
       .from('matches')
       .update(updates)
       .eq('id', matchId);
-    
+
     if (error) throw error;
   },
 
@@ -227,7 +227,7 @@ export const adminApi = {
       .from('matches')
       .delete()
       .eq('id', matchId);
-    
+
     if (error) throw error;
   },
 
@@ -338,7 +338,7 @@ export const adminApi = {
     const { data: matches, error } = await supabase
       .from('matches')
       .select('id, score1, score2');
-    
+
     if (error) throw error;
 
     for (const match of matches) {
@@ -358,13 +358,13 @@ export const adminApi = {
     const { data: guesses, error: guessesError } = await supabase
       .from('guesses')
       .select('*');
-    
+
     if (guessesError) throw guessesError;
 
     const { data: groupPredictions, error: groupPredsError } = await supabase
       .from('group_predictions')
       .select('*');
-    
+
     if (groupPredsError) throw groupPredsError;
 
     return {
@@ -389,7 +389,7 @@ export const adminApi = {
       const { error } = await supabase
         .from('guesses')
         .upsert(cleanGuesses, { onConflict: 'profile_id,match_id' });
-      
+
       if (error) throw error;
     }
 
@@ -407,7 +407,7 @@ export const adminApi = {
       const { error } = await supabase
         .from('group_predictions')
         .upsert(cleanGroupPreds, { onConflict: 'profile_id,group_letter' });
-      
+
       if (error) throw error;
     }
 
@@ -557,5 +557,144 @@ export const adminApi = {
       }
     }
     return true;
+  },
+
+  async populateRoundOf32Matches() {
+    // 1. Fetch group results
+    const { data: groupResults, error: grError } = await supabase
+      .from('group_results')
+      .select('*');
+    if (grError) throw grError;
+
+    // 2. Fetch matches for 16-avos de final
+    const { data: dbMatches, error: matchesError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('round', '16-avos de final');
+    if (matchesError) throw matchesError;
+
+    // 3. Define original placeholders
+    const originalMatches = [
+      { id: 'm73', team1: '2A', team2: '2B' },
+      { id: 'm74', team1: '1E', team2: '3A/B/C/D/F' },
+      { id: 'm75', team1: '1F', team2: '2C' },
+      { id: 'm76', team1: '1C', team2: '2F' },
+      { id: 'm77', team1: '1I', team2: '3C/D/F/G/H' },
+      { id: 'm78', team1: '2E', team2: '2I' },
+      { id: 'm79', team1: '1A', team2: '3C/E/F/H/I' },
+      { id: 'm80', team1: '1L', team2: '3E/H/I/J/K' },
+      { id: 'm81', team1: '1D', team2: '3B/E/F/I/J' },
+      { id: 'm82', team1: '1G', team2: '3A/E/H/I/J' },
+      { id: 'm83', team1: '2K', team2: '2L' },
+      { id: 'm84', team1: '1H', team2: '2J' },
+      { id: 'm85', team1: '1B', team2: '3E/F/G/I/J' },
+      { id: 'm86', team1: '1J', team2: '2H' },
+      { id: 'm87', team1: '1K', team2: '3D/E/I/J/L' },
+      { id: 'm88', team1: '2D', team2: '2G' }
+    ];
+
+    // Create lookup maps for group results
+    const firstPlaceMap = new Map<string, string>();
+    const secondPlaceMap = new Map<string, string>();
+    const thirdPlaceMap = new Map<string, string>();
+    const qualifiedThirds: string[] = [];
+
+    groupResults.forEach(gr => {
+      const g = gr.group_letter;
+      if (gr.first_place) firstPlaceMap.set(g, gr.first_place);
+      if (gr.second_place) secondPlaceMap.set(g, gr.second_place);
+      if (gr.third_place) {
+        thirdPlaceMap.set(g, gr.third_place);
+        if (gr.third_place_qualified) {
+          qualifiedThirds.push(g);
+        }
+      }
+    });
+
+    // Solve third-place bipartite matching if there are exactly 8 qualified third place groups
+    let thirdPlaceAssignment: Record<string, string> = {};
+    if (qualifiedThirds.length === 8) {
+      const matchesWithThirds = [
+        { id: 'm74', allowed: ['A', 'B', 'C', 'D', 'F'] },
+        { id: 'm77', allowed: ['C', 'D', 'F', 'G', 'H'] },
+        { id: 'm79', allowed: ['C', 'E', 'F', 'H', 'I'] },
+        { id: 'm80', allowed: ['E', 'H', 'I', 'J', 'K'] },
+        { id: 'm81', allowed: ['B', 'E', 'F', 'I', 'J'] },
+        { id: 'm82', allowed: ['A', 'E', 'H', 'I', 'J'] },
+        { id: 'm85', allowed: ['E', 'F', 'G', 'I', 'J'] },
+        { id: 'm87', allowed: ['D', 'E', 'I', 'J', 'L'] }
+      ];
+
+      const assignment: Record<string, string> = {};
+      const usedMatches = new Set<string>();
+
+      const backtrack = (idx: number): boolean => {
+        if (idx === qualifiedThirds.length) return true;
+        const group = qualifiedThirds[idx];
+        for (const m of matchesWithThirds) {
+          if (!usedMatches.has(m.id) && m.allowed.includes(group)) {
+            assignment[m.id] = group;
+            usedMatches.add(m.id);
+            if (backtrack(idx + 1)) return true;
+            usedMatches.delete(m.id);
+            delete assignment[m.id];
+          }
+        }
+        return false;
+      };
+
+      qualifiedThirds.sort();
+      if (backtrack(0)) {
+        thirdPlaceAssignment = assignment;
+      }
+    }
+
+    // Now, build the updates
+    const dbMatchesMap = new Map(dbMatches.map(m => [m.id, m]));
+    const updates: Array<{ id: string, team1: string, team2: string }> = [];
+
+    originalMatches.forEach(orig => {
+      let team1 = orig.team1;
+      let team2 = orig.team2;
+
+      // Resolve team1
+      if (team1.startsWith('1')) {
+        const group = team1.substring(1);
+        team1 = firstPlaceMap.get(group) || orig.team1;
+      } else if (team1.startsWith('2')) {
+        const group = team1.substring(1);
+        team1 = secondPlaceMap.get(group) || orig.team1;
+      }
+
+      // Resolve team2
+      if (team2.startsWith('2')) {
+        const group = team2.substring(1);
+        team2 = secondPlaceMap.get(group) || orig.team2;
+      } else if (team2.startsWith('3')) {
+        const assignedGroup = thirdPlaceAssignment[orig.id];
+        if (assignedGroup) {
+          team2 = thirdPlaceMap.get(assignedGroup) || orig.team2;
+        } else {
+          team2 = orig.team2;
+        }
+      }
+
+      const dbMatch = dbMatchesMap.get(orig.id);
+      if (dbMatch && (dbMatch.team1 !== team1 || dbMatch.team2 !== team2)) {
+        updates.push({ id: orig.id, team1, team2 });
+      }
+    });
+
+    // Execute the updates
+    if (updates.length > 0) {
+      console.log(`Updating ${updates.length} Round of 32 matches...`, updates);
+      for (const u of updates) {
+        const { error: updErr } = await supabase
+          .from('matches')
+          .update({ team1: u.team1, team2: u.team2 })
+          .eq('id', u.id);
+        if (updErr) throw updErr;
+      }
+    }
   }
 };

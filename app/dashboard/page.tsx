@@ -18,6 +18,35 @@ import { formatMatchDate, formatMatchTime, parseMatchDateTime, normalizeTeamName
 import EvolutionChart from '@/components/EvolutionChart';
 import { BADGES_DEFINITION, calculateUserBadges } from '@/lib/badges';
 
+const calculateGroupPoints = (pred: any, result: any) => {
+  if (!result || !result.first_place || !result.second_place) return 0;
+  let pts = 0;
+  
+  const pFirst = pred?.first_place;
+  const pSecond = pred?.second_place;
+  const pThird = pred?.third_place;
+  const pThirdQual = pred?.third_place_qualified || false;
+  
+  const rFirst = result.first_place;
+  const rSecond = result.second_place;
+  const rThird = result.third_place;
+  const rThirdQual = result.third_place_qualified || false;
+
+  if (pFirst === rFirst && pSecond === rSecond) {
+    pts += 5;
+  } else if (pFirst === rFirst) {
+    pts += 3;
+  } else if (pSecond === rSecond) {
+    pts += 2;
+  }
+
+  if (pThirdQual && rThirdQual && pThird === rThird) {
+    pts += 1;
+  }
+
+  return pts;
+};
+
 export default function Dashboard() {
   const router = useRouter();
   
@@ -26,6 +55,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState([
     { label: 'Pontos Totais', value: '0', icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
     { label: 'Pontos de Hoje', value: '0 pts', icon: Calendar, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'Pontos de Classificação', value: '0 pts', icon: Target, color: 'text-pink-400', bg: 'bg-pink-400/10' },
     { label: 'Posição no Ranking', value: '-', icon: Trophy, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
   ]);
   const [profileName, setProfileName] = useState<string>('');
@@ -126,9 +156,14 @@ export default function Dashboard() {
           if (resultsData) setGroupResults(resultsData);
 
           // Update initial stats
+          const totalPoints = profile?.points || 0;
+          const matchGuessesPoints = guessesData ? guessesData.reduce((acc: number, curr: any) => acc + (curr.points_earned || 0), 0) : 0;
+          const classificationPoints = Math.max(0, totalPoints - matchGuessesPoints);
+
           setStats([
-            { label: 'Pontos Totais', value: String(profile?.points || 0), icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
+            { label: 'Pontos Totais', value: String(totalPoints), icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
             { label: 'Pontos de Hoje', value: '0 pts', icon: Calendar, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+            { label: 'Pontos de Classificação', value: `${classificationPoints} pts`, icon: Target, color: 'text-pink-400', bg: 'bg-pink-400/10' },
             { label: 'Posição no Ranking', value: `${computedRank}º`, icon: Trophy, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
           ]);
         } else {
@@ -452,7 +487,7 @@ export default function Dashboard() {
         </header>
  
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
           {stats.map((stat, i) => (
             <motion.div
               key={stat.label}
@@ -805,6 +840,105 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Palpites de Grupo */}
+            {user && (
+              <div className="glass p-6 md:p-8 rounded-[32px] border-slate-800/80 mt-8">
+                <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
+                      <Target size={16} /> Palpites de Grupo
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
+                      Classificação prevista dos grupos e pontos conquistados
+                    </p>
+                  </div>
+                  <Link href="/dashboard/matches" className="text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-400 transition-colors">
+                    Ver e Ajustar Palpites →
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(groupLetter => {
+                    const pred = userGroupPredictions.find(p => p.group_letter === groupLetter);
+                    const result = groupResults.find(r => r.group_letter === groupLetter);
+                    
+                    const pts = calculateGroupPoints(pred, result);
+                    const isGroupCompleted = result && result.first_place && result.second_place;
+
+                    return (
+                      <div key={groupLetter} className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-2xl flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-all">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
+                          <span className="text-xs font-black text-white">GRUPO {groupLetter}</span>
+                          {isGroupCompleted ? (
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
+                              pts > 0 
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                : 'bg-slate-950 text-slate-600 border border-slate-900'
+                            }`}>
+                              +{pts} pts
+                            </span>
+                          ) : (
+                            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">
+                              Pendente
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2 text-[10px]">
+                          {/* 1º Lugar */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">1º Lugar</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`font-black uppercase tracking-tight ${pred?.first_place ? 'text-slate-200' : 'text-slate-600 italic'}`}>
+                                {pred?.first_place || 'Sem palpite'}
+                              </span>
+                              {isGroupCompleted && pred?.first_place && (
+                                <span className={pred.first_place === result.first_place ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
+                                  {pred.first_place === result.first_place ? '✓' : '✗'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 2º Lugar */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">2º Lugar</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`font-black uppercase tracking-tight ${pred?.second_place ? 'text-slate-200' : 'text-slate-600 italic'}`}>
+                                {pred?.second_place || 'Sem palpite'}
+                              </span>
+                              {isGroupCompleted && pred?.second_place && (
+                                <span className={pred.second_place === result.second_place ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
+                                  {pred.second_place === result.second_place ? '✓' : '✗'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 3º Lugar */}
+                          {pred?.third_place && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">3º Lugar</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`font-black uppercase tracking-tight ${pred.third_place_qualified ? 'text-amber-400' : 'text-slate-400'} line-clamp-1 max-w-[80px]`}>
+                                  {pred.third_place} {pred.third_place_qualified ? '⭐️' : ''}
+                                </span>
+                                {isGroupCompleted && (
+                                  <span className={(pred.third_place_qualified && result.third_place_qualified && pred.third_place === result.third_place) ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
+                                    {(pred.third_place_qualified && result.third_place_qualified && pred.third_place === result.third_place) ? '✓' : '✗'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

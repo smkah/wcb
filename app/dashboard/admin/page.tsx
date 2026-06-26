@@ -271,6 +271,19 @@ export default function AdminPage() {
     }
   };
 
+  const handlePopulateRoundOf32 = async () => {
+    setIsSyncing(true);
+    try {
+      await adminApi.populateRoundOf32Matches();
+      await fetchAllData();
+      toast.success("Partidas de 16-avos de final atualizadas com sucesso!");
+    } catch (error: any) {
+      toast.error("Erro ao popular 16-avos de final: " + (error.message || error));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
 
 
   const handleDeleteUser = async (id: string) => {
@@ -386,7 +399,15 @@ export default function AdminPage() {
       
       if (error) throw error;
       toast.success(`Resultado do Grupo ${groupLetter} salvo com sucesso!`);
+      
+      try {
+        await adminApi.populateRoundOf32Matches();
+      } catch (popErr: any) {
+        console.error("Auto-population of Round of 32 failed:", popErr);
+      }
+
       await fetchGroupResults();
+      await fetchAllData();
     } catch (err: any) {
       toast.error("Erro ao salvar resultado de grupo: " + (err.message || "Tente novamente"));
     } finally {
@@ -943,6 +964,17 @@ export default function AdminPage() {
                         {isSyncing ? <RefreshCw size={20} className="animate-spin" /> : <Trophy size={20} />}
                       </div>
                       <span className="font-bold text-xs uppercase tracking-widest text-left">Simular Resultados</span>
+                    </button>
+
+                    <button 
+                      onClick={handlePopulateRoundOf32}
+                      disabled={isSyncing}
+                      className="flex items-center gap-4 p-6 bg-slate-900 rounded-3xl border border-slate-800 hover:border-emerald-500/50 transition-all group disabled:opacity-50"
+                    >
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-emerald-400">
+                        {isSyncing ? <RefreshCw size={20} className="animate-spin" /> : <Sparkles size={20} />}
+                      </div>
+                      <span className="font-bold text-xs uppercase tracking-widest text-left">Popular 16-avos</span>
                     </button>
 
                     <button 
