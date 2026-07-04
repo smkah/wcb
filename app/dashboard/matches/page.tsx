@@ -27,7 +27,7 @@ export default function MatchesPage() {
   const [userGroups, setUserGroups] = useState<any[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<'matches' | 'standings'>('matches');
   const [groupBy, setGroupBy] = useState<'phase' | 'date'>('date');
-  const [hideFinished, setHideFinished] = useState<boolean>(false);
+  const [hideFinished, setHideFinished] = useState<boolean>(true);
   const [groupPredictions, setGroupPredictions] = useState<Record<string, { firstPlace: string, secondPlace: string, thirdPlace: string, thirdPlaceQualified: boolean }>>({});
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [groupResults, setGroupResults] = useState<any[]>([]);

@@ -830,7 +830,17 @@ export default function AdminPage() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Hora</label>
-                        <input type="time" value={editingItem.data.time || ''} onChange={e => setEditingItem({ ...editingItem, data: { ...editingItem.data, time: e.target.value } })} className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" required />
+                        <input 
+                          type="time" 
+                          value={(editingItem.data.time || '').match(/^(\d{2}:\d{2})/) ? (editingItem.data.time || '').match(/^(\d{2}:\d{2})/)[1] : ''} 
+                          onChange={e => {
+                            const originalSuffix = (editingItem.data.time || '').replace(/^\d{2}:\d{2}/, '');
+                            const suffix = originalSuffix || ' UTC-3';
+                            setEditingItem({ ...editingItem, data: { ...editingItem.data, time: e.target.value + suffix } });
+                          }} 
+                          className="w-full bg-slate-900 border border-slate-800 p-4 rounded-2xl" 
+                          required 
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -1180,25 +1190,32 @@ export default function AdminPage() {
 
               {(() => {
                 const renderMatchRow = (m: any) => (
-                  <div key={m.id} className="flex flex-col md:flex-row items-center justify-between p-6 bg-slate-900/50 rounded-2xl border border-slate-800 group hover:border-amber-500/30 transition-all gap-6">
-                    <div className="flex items-center gap-6 flex-1">
-                      <div className="text-center min-w-[60px]">
+                  <div key={m.id} className="flex flex-col md:flex-row items-center justify-between p-4 sm:p-6 bg-slate-900/50 rounded-2xl border border-slate-800 group hover:border-amber-500/30 transition-all gap-4 sm:gap-6 w-full">
+                    <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 flex-1 w-full">
+                      {/* Data e Hora */}
+                      <div className="text-center min-w-[60px] bg-slate-950/40 px-3 py-1.5 rounded-lg border border-slate-800/40 w-full sm:w-auto">
                         <p className="text-xs font-black text-emerald-400">{formatMatchDate(m.date)}</p>
                         <p className="text-[10px] font-bold text-slate-500">{formatMatchTime(m.time)}</p>
                       </div>
-                      <div className="flex items-center gap-4 flex-1">
-                        <span className="font-black text-sm uppercase flex-1 text-right truncate">{m.team1}</span>
-                        <div className="flex items-center gap-2">
-                           <input type="text" value={m.score1 !== null && m.score1 !== undefined ? m.score1 : ''} className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none" readOnly />
-                           <span className="text-slate-700 italic">X</span>
-                           <input type="text" value={m.score2 !== null && m.score2 !== undefined ? m.score2 : ''} className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none" readOnly />
+
+                      {/* Equipes e Placar */}
+                      <div className="flex items-center justify-between gap-3 flex-1 w-full">
+                        <span className="font-black text-xs sm:text-sm uppercase flex-1 text-right truncate max-w-[120px] sm:max-w-none">{m.team1}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                           <input type="text" value={m.score1 !== null && m.score1 !== undefined ? m.score1 : ''} className="w-9 h-9 sm:w-10 sm:h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none text-sm sm:text-base" readOnly />
+                           <span className="text-slate-700 italic text-xs sm:text-sm font-black">X</span>
+                           <input type="text" value={m.score2 !== null && m.score2 !== undefined ? m.score2 : ''} className="w-9 h-9 sm:w-10 sm:h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none text-sm sm:text-base" readOnly />
                         </div>
-                        <span className="font-black text-sm uppercase flex-1 truncate">{m.team2}</span>
+                        <span className="font-black text-xs sm:text-sm uppercase flex-1 text-left truncate max-w-[120px] sm:max-w-none">{m.team2}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                       <span className="px-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-bold text-slate-500 uppercase tracking-widest">{m.round}</span>
-                       <button onClick={() => setEditingItem({ type: 'matches', data: m })} className="p-3 text-slate-500 hover:text-white"><Edit size={18} /></button>
+
+                    {/* Ações da Partida */}
+                    <div className="flex items-center justify-between sm:justify-end gap-4 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0 border-slate-800/60">
+                       <span className="px-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest">{m.round}</span>
+                       <div className="flex items-center gap-1">
+                         <button onClick={() => setEditingItem({ type: 'matches', data: m })} className="p-2.5 bg-slate-950/60 border border-slate-800/80 hover:border-amber-500/40 rounded-xl text-slate-500 hover:text-white transition-all"><Edit size={16} /></button>
+                       </div>
                     </div>
                   </div>
                 );

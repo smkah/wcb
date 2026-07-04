@@ -87,6 +87,20 @@ export default function Dashboard() {
   }>({ total: 0, exact: 0, outcome: 0, errors: 0, rate: 0 });
   const [recentHistory, setRecentHistory] = useState<any[]>([]);
 
+  // Knockout/Group Sweepstakes states
+  const [userGroups, setUserGroups] = useState<any[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [selectedGroupDetails, setSelectedGroupDetails] = useState<any>(null);
+  const [groupMembers, setGroupMembers] = useState<any[]>([]);
+  const [groupGuesses, setGroupGuesses] = useState<any[]>([]);
+  const [loadingKnockout, setLoadingKnockout] = useState(false);
+  const [allMatches, setAllMatches] = useState<any[]>([]);
+  const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
+
+  const toggleStageCollapse = (stage: string) => {
+    setCollapsedStages(prev => ({ ...prev, [stage]: !prev[stage] }));
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       if (!isSupabaseConfigured) return;
@@ -155,6 +169,18 @@ export default function Dashboard() {
             .select('*');
           if (resultsData) setGroupResults(resultsData);
 
+          // Fetch user's groups
+          const { data: userGroupsData } = await supabase
+            .from('group_members')
+            .select('group_id, groups(*)')
+            .eq('profile_id', currentUser.id);
+
+          if (userGroupsData && userGroupsData.length > 0) {
+            const processedGroups = userGroupsData.map((ug: any) => ug.groups).filter(Boolean);
+            setUserGroups(processedGroups);
+            setSelectedGroupId(processedGroups[0].id);
+          }
+
           // Update initial stats
           const totalPoints = profile?.points || 0;
           const matchGuessesPoints = guessesData ? guessesData.reduce((acc: number, curr: any) => acc + (curr.points_earned || 0), 0) : 0;
@@ -180,6 +206,7 @@ export default function Dashboard() {
         
         const rawMatches = (matches && matches.length > 0) ? matches : WORLD_CUP_DATA.matches;
         loadedMatches = mapMatchesToBrazil(rawMatches);
+        setAllMatches(loadedMatches);
 
         // Filter matches for the next 3 days (Today, Tomorrow, Day After)
         const localDate = new Date();
@@ -306,6 +333,92 @@ export default function Dashboard() {
     };
     fetchData();
   }, [router]);
+
+  useEffect(() => {
+    const fetchGroupData = async () => {
+      if (!selectedGroupId || allMatches.length === 0) return;
+      setLoadingKnockout(true);
+      try {
+        // Fetch group details to get score rules
+        const { data: groupData } = await supabase
+          .from('groups')
+          .select('*')
+          .eq('id', selectedGroupId)
+          .single();
+        setSelectedGroupDetails(groupData);
+
+        // Fetch members of this group
+        const { data: membersData } = await supabase
+          .from('group_members')
+          .select('profile_id, profiles(*)')
+          .eq('group_id', selectedGroupId);
+        
+        if (membersData) {
+          const members = membersData.map((m: any) => m.profiles).filter(Boolean);
+          setGroupMembers(members);
+
+          // Get finished knockout matches
+          const finishedKnockoutIds = allMatches
+            .filter((m: any) => !m.group && m.score1 !== null && m.score2 !== null)
+            .map((m: any) => m.id);
+
+          if (finishedKnockoutIds.length > 0) {
+            const memberIds = members.map((m: any) => m.id);
+            // Fetch guesses for these matches by these members
+            const { data: guessesData } = await supabase
+              .from('guesses')
+              .select('*')
+              .in('profile_id', memberIds)
+              .in('match_id', finishedKnockoutIds);
+            
+            setGroupGuesses(guessesData || []);
+          } else {
+            setGroupGuesses([]);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching group knockout data:", err);
+      } finally {
+        setLoadingKnockout(false);
+      }
+    };
+
+    fetchGroupData();
+  }, [selectedGroupId, allMatches]);
+
+  const getPointsBreakdown = (guess: any, match: any, rules: any) => {
+    if (!guess || match.score1 === null || match.score2 === null) return [];
+
+    const ptsWinner = rules?.points_winner ?? 2; // Default from create group is 2
+    const ptsExact = rules?.points_exact ?? 5;
+    const ptsYellow = rules?.points_yellow_cards ?? 3;
+    const ptsRed = rules?.points_red_card ?? 4;
+
+    const breakdown = [];
+
+    // Exact score
+    const isExact = match.score1 === guess.score1 && match.score2 === guess.score2;
+    // Outcome
+    const isOutcome = !isExact && (Math.sign(match.score1 - match.score2) === Math.sign(guess.score1 - guess.score2));
+
+    if (isExact) {
+      breakdown.push({ label: 'Placar Exato', points: ptsExact, type: 'exact' });
+    } else if (isOutcome) {
+      breakdown.push({ label: 'Resultado', points: ptsWinner, type: 'winner' });
+    }
+
+    // Yellow Cards
+    if (match.yellow_cards_winner && guess.yellow_cards_winner && normalizeTeamName(match.yellow_cards_winner) === normalizeTeamName(guess.yellow_cards_winner)) {
+      breakdown.push({ label: 'Mais Amarelos', points: ptsYellow, type: 'yellow' });
+    }
+
+    // Red Card
+    if (match.has_red_card !== null && guess.has_red_card !== null && match.has_red_card === guess.has_red_card) {
+      breakdown.push({ label: 'Cartão Vermelho', points: ptsRed, type: 'red' });
+    }
+
+    return breakdown;
+  };
 
   const isMatchStarted = (match: any) => {
     if (!match?.date) return false;
@@ -841,6 +954,232 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Seção Mata-Mata e Pontos do Bolão */}
+            {user && (
+              <div className="glass p-6 md:p-8 rounded-[32px] border-slate-800/80 mt-8">
+                <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
+                      <Trophy size={16} /> Detalhamento do Mata-Mata
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
+                      Jogos pós-fase de grupos e pontos ganhos por participante do bolão
+                    </p>
+                  </div>
+                  {userGroups.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Bolão:</span>
+                      <select
+                        value={selectedGroupId}
+                        onChange={(e) => setSelectedGroupId(e.target.value)}
+                        className="bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-lg px-3 py-1.5 focus:border-emerald-500 outline-none cursor-pointer"
+                      >
+                        {userGroups.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {userGroups.length === 0 ? (
+                  <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-2">
+                    <Users size={32} className="text-slate-600 mb-1" />
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Você não faz parte de nenhum bolão</p>
+                    <Link href="/dashboard/groups" className="text-[10px] font-black text-emerald-400 hover:text-emerald-300 uppercase tracking-widest mt-1">
+                      Participar ou criar um bolão
+                    </Link>
+                  </div>
+                ) : loadingKnockout ? (
+                  <div className="py-12 flex flex-col items-center justify-center">
+                    <Loader2 size={32} className="animate-spin text-emerald-500 mb-2" />
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Carregando dados do bolão...</p>
+                  </div>
+                ) : (
+                  (() => {
+                    const knockoutMatches = allMatches.filter((m: any) => !m.group && m.score1 !== null && m.score2 !== null);
+                    
+                    if (knockoutMatches.length === 0) {
+                      return (
+                        <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-2">
+                          <Trophy size={32} className="text-slate-600 mb-1" />
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nenhuma partida do mata-mata concluída ainda</p>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase">As estatísticas aparecerão assim que os jogos do mata-mata forem finalizados.</p>
+                        </div>
+                      );
+                    }
+
+                    // Group by stage (round)
+                    const stages: Record<string, any[]> = {};
+                    knockoutMatches.forEach((match) => {
+                      const round = match.round || 'Outro';
+                      if (!stages[round]) stages[round] = [];
+                      stages[round].push(match);
+                    });
+
+                    // Order of stages to display them logically
+                    const stageOrder = ["16-avos de final", "Oitavas de final", "Quartas de final", "Semi-final", "Disputa pelo 3º Lugar", "Final"];
+                    const sortedStages = Object.keys(stages).sort((a, b) => {
+                      const idxA = stageOrder.indexOf(a);
+                      const idxB = stageOrder.indexOf(b);
+                      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                      if (idxA !== -1) return -1;
+                      if (idxB !== -1) return 1;
+                      return a.localeCompare(b);
+                    });
+
+                    return (
+                      <div className="space-y-6">
+                        {sortedStages.map((stage) => {
+                          const isCollapsed = collapsedStages[stage] ?? false;
+                          const stageMatches = stages[stage];
+
+                          return (
+                            <div key={stage} className="border border-slate-800/80 rounded-[24px] overflow-hidden bg-slate-900/10">
+                              <button
+                                onClick={() => toggleStageCollapse(stage)}
+                                className="w-full flex items-center justify-between p-4 bg-slate-900/30 hover:bg-slate-900/50 transition-colors text-left border-b border-slate-800/40"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-black uppercase text-emerald-400 tracking-wider">
+                                    {stage}
+                                  </span>
+                                  <span className="px-2.5 py-0.5 bg-slate-900/80 text-[9px] font-bold text-slate-400 rounded-md border border-slate-800/60">
+                                    {stageMatches.length} {stageMatches.length === 1 ? 'jogo' : 'jogos'}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-black text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest flex items-center gap-1">
+                                  {isCollapsed ? 'Expandir ▾' : 'Minimizar ▴'}
+                                </span>
+                              </button>
+
+                              {!isCollapsed && (
+                                <div className="p-4 space-y-4 bg-slate-950/10">
+                                  {stageMatches.map((match) => (
+                                    <div key={match.id} className="p-5 bg-slate-900/20 border border-slate-800/40 rounded-2xl flex flex-col gap-4">
+                                      {/* Match Header info */}
+                                      <div className="flex flex-col sm:flex-row items-center justify-between pb-3 border-b border-slate-800/40 gap-3">
+                                        <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-black rounded-lg uppercase tracking-wider">
+                                          {match.round}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-xs uppercase text-slate-200">{match.team1}</span>
+                                          <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800">
+                                            <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" />
+                                          </div>
+                                          <span className="font-black text-sm text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{match.score1} - {match.score2}</span>
+                                          <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800">
+                                            <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" />
+                                          </div>
+                                          <span className="font-bold text-xs uppercase text-slate-200">{match.team2}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[9px] text-slate-400 uppercase font-bold">
+                                          {match.yellow_cards_winner && (
+                                            <span className="flex items-center gap-1">
+                                              🟨 <strong className="text-amber-400">{match.yellow_cards_winner === 'Empate' ? 'EMP' : match.yellow_cards_winner}</strong>
+                                            </span>
+                                          )}
+                                          {match.has_red_card !== null && (
+                                            <span className="flex items-center gap-1">
+                                              🟥 <strong className="text-rose-500">{match.has_red_card ? 'SIM' : 'NÃO'}</strong>
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Participants guesses & points breakdown */}
+                                      <div className="space-y-3">
+                                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Palpites e Pontuação dos Participantes:</p>
+                                        
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                          {groupMembers.map((member) => {
+                                            const guess = groupGuesses.find((g) => g.profile_id === member.id && g.match_id === match.id);
+                                            const breakdown = getPointsBreakdown(guess, match, selectedGroupDetails);
+                                            const totalPts = guess ? (guess.points_earned || 0) : 0;
+
+                                            return (
+                                              <div key={member.id} className="p-3 bg-slate-950/40 border border-slate-800/40 rounded-xl flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                  <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-black text-emerald-400 uppercase overflow-hidden shrink-0">
+                                                    {member.avatar_url ? (
+                                                      <img src={member.avatar_url} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                      member.full_name?.charAt(0) || '?'
+                                                    )}
+                                                  </div>
+                                                  <div className="min-w-0">
+                                                    <p className="text-xs font-black text-white truncate">{member.full_name || member.username || 'Membro'}</p>
+                                                    {guess ? (
+                                                      <div className="text-[9px] text-slate-400 font-medium">
+                                                        Palpite: <strong className="text-slate-200">{guess.score1} x {guess.score2}</strong>
+                                                        {guess.yellow_cards_winner && (
+                                                          <span className="ml-1 text-[8px] text-amber-500 bg-amber-500/10 px-1 py-0.2 rounded font-black">
+                                                            🟨 {guess.yellow_cards_winner === 'Empate' ? 'EMP' : guess.yellow_cards_winner.substring(0, 3).toUpperCase()}
+                                                          </span>
+                                                        )}
+                                                        {guess.has_red_card !== null && (
+                                                          <span className="ml-1 text-[8px] text-rose-500 bg-rose-500/10 px-1 py-0.2 rounded font-black">
+                                                            🟥 {guess.has_red_card ? 'SIM' : 'NÃO'}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    ) : (
+                                                      <p className="text-[9px] text-rose-500/70 italic font-bold uppercase">Sem palpite</p>
+                                                    )}
+                                                  </div>
+                                                </div>
+
+                                                <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                                                  <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${
+                                                    totalPts > 0 
+                                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                                                      : 'bg-slate-900/60 text-slate-500 border border-slate-800'
+                                                  }`}>
+                                                    +{totalPts} pts
+                                                  </span>
+                                                  {breakdown.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1 justify-end max-w-[150px]">
+                                                      {breakdown.map((item, bIdx) => (
+                                                        <span 
+                                                          key={bIdx} 
+                                                          className={`text-[7px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                                                            item.type === 'exact' 
+                                                              ? 'bg-emerald-500/20 text-emerald-300' 
+                                                              : item.type === 'winner' 
+                                                                ? 'bg-cyan-500/20 text-cyan-300' 
+                                                                : item.type === 'yellow' 
+                                                                  ? 'bg-amber-500/20 text-amber-300' 
+                                                                  : 'bg-rose-500/20 text-rose-300'
+                                                          }`}
+                                                          title={`${item.label}: +${item.points} pts`}
+                                                        >
+                                                          {item.label.split(' ')[0]} (+{item.points})
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
+                )}
               </div>
             )}
 

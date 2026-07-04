@@ -117,9 +117,9 @@ export default function RankingPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 items-end">
                 {ranking.slice(0, 3).map((user, idx) => {
                   const positions = [
-                    { label: '2º', height: 'h-48', color: 'bg-slate-400/10 text-slate-400 border-slate-400/30', order: 'order-2 md:order-1' },
-                    { label: '1º', height: 'h-64', color: 'bg-amber-400/10 text-amber-500 border-amber-400/30', order: 'order-1 md:order-2 shadow-2xl shadow-amber-400/5 my-6 md:my-0 scale-100 md:scale-110' },
-                    { label: '3º', height: 'h-40', color: 'bg-orange-800/10 text-orange-800 border-orange-800/30', order: 'order-3' }
+                    {label: '2º', height: 'h-auto min-h-[110px] md:h-48', color: 'bg-slate-400/10 text-slate-400 border-slate-400/30', order: 'order-2 md:order-1' },
+                    {label: '1º', height: 'h-auto min-h-[130px] md:h-64', color: 'bg-amber-400/10 text-amber-500 border-amber-400/30', order: 'order-1 md:order-2 shadow-2xl shadow-amber-400/5 my-6 md:my-0 scale-100 md:scale-110' },
+                    {label: '3º', height: 'h-auto min-h-[100px] md:h-40', color: 'bg-orange-800/10 text-orange-800 border-orange-800/30', order: 'order-3' }
                   ];
                   const pos = idx === 0 ? positions[1] : idx === 1 ? positions[0] : positions[2];
                   const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
@@ -133,20 +133,32 @@ export default function RankingPage() {
                       onClick={() => setSelectedUser(user)}
                       className={`${pos.order} relative flex flex-col items-center cursor-pointer hover:scale-[1.03] transition-all`}
                     >
-                      <div className={`w-full ${pos.height} ${pos.color} border-2 border-b-0 rounded-t-[40px] p-6 flex flex-col items-center justify-center text-center gap-2`}>
-                        <h3 className="font-black uppercase tracking-tight text-lg line-clamp-1 truncate max-w-full flex items-center gap-1.5 justify-center">
-                          <span className='animate-pulse'>{medal}</span> {user.full_name || user.email?.split('@')[0]}
-                        </h3>
-                        {user.username && (
-                          <p className="text-[10px] font-bold text-emerald-400">@{user.username}</p>
-                        )}
-                        {ranking.length > 1 && user.id === ranking[ranking.length - 1].id && (
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-red-500/25 text-red-400 border border-red-500/40 flex items-center gap-1.5 shadow-lg shadow-red-500/10">
-                            <Flashlight size={14} className="animate-pulse text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.8)]" /> Lanterna
-                          </span>
-                        )}
-                        <p className="font-black text-3xl">{user.points || 0}</p>
-                        <p className="text-[10px] uppercase font-bold tracking-widest opacity-60">PONTOS ACUMULADOS</p>
+                      <div className={`w-full ${pos.height} ${pos.color} border-2 border-b-0 rounded-t-[40px] p-5 flex items-center justify-center gap-4 text-left`}>
+                        {/* Coluna 1: Avatar */}
+                        <div className="w-16 h-16 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center font-black text-slate-400 uppercase overflow-hidden shrink-0">
+                          {user.avatar_url ? (
+                            <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                          ) : (
+                            user.full_name?.charAt(0) || user.email?.charAt(0) || '?'
+                          )}
+                        </div>
+
+                        {/* Coluna 2: Informações */}
+                        <div className="flex flex-col gap-0.5">
+                          <h3 className="font-black uppercase tracking-tight text-sm line-clamp-1 truncate max-w-full flex items-center gap-1">
+                            <span className='animate-pulse'>{medal}</span> {user.full_name || user.email?.split('@')[0]}
+                          </h3>
+                          <div className="mt-1">
+                            <p className="font-black text-2xl leading-none text-white">{user.points || 0}</p>
+                            <p className="text-[7px] uppercase font-bold tracking-wider opacity-60 mt-0.5">PONTOS</p>
+                            {idx > 0 && (
+                              <p className="text-[9px] font-bold text-rose-500 mt-1">{user.points - ranking[idx - 1].points} pts</p>
+                            )}
+                            {idx === 0 && (
+                              <p className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mt-1">Líder</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </motion.div>
                   )
@@ -168,28 +180,37 @@ export default function RankingPage() {
                   >
                     <div className="flex items-center gap-6">
                       <span className="w-8 font-black text-slate-700 italic text-xl">#{hasPoints ? idx + 4 : idx + 1}</span>
-                      <div className="w-12 h-12 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center font-black text-slate-400 group-hover:text-emerald-400 transition-colors uppercase">
-                        {user.full_name?.charAt(0) || user.email?.charAt(0) || '?'}
+                      <div className="w-12 h-12 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center font-black text-slate-400 group-hover:text-emerald-400 transition-colors uppercase overflow-hidden">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                        ) : (
+                          user.full_name?.charAt(0) || user.email?.charAt(0) || '?'
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          {ranking.length > 1 && user.id === ranking[ranking.length - 1].id && (
-                            <Flashlight size={28} className="rotate-90 animate-pulse text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.8)]" />
-                          )}
                           {absoluteRankIndex === 0 && <span className="text-lg">🥇</span>}
                           {absoluteRankIndex === 1 && <span className="text-lg">🥈</span>}
                           {absoluteRankIndex === 2 && <span className="text-lg">🥉</span>}
                           <p className="font-bold text-white group-hover:text-emerald-400 transition-colors">{user.full_name || user.email?.split('@')[0]}</p>
-                          {user.username && (
-                            <span className="text-[10px] font-bold text-emerald-400">@{user.username}</span>
-                          )}
                         </div>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user.email?.replace(/(.{3}).*(@.*)/, '$1***$2')}</p>
-
                       </div>
                     </div>
                     <div className="flex flex-col items-end">
-                      <p className="text-2xl font-black text-white">{user.points || 0}</p>
+                      <div className="flex items-baseline gap-1">
+                        <p className="text-2xl font-black text-white">{user.points || 0}</p>
+                        {absoluteRankIndex > 0 && (
+                          <span className="text-[10px] font-black text-rose-500/80">
+                            {user.points - ranking[absoluteRankIndex - 1].points}
+                          </span>
+                        )}
+                        {absoluteRankIndex === 0 && (
+                          <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">
+                            Líder
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[8px] font-black uppercase text-slate-700 tracking-widest">PONTOS</p>
                     </div>
                   </motion.div>
@@ -249,15 +270,7 @@ export default function RankingPage() {
                       {ranking.findIndex(u => u.id === selectedUser.id) === 2 && <span>🥉</span>}
                       {selectedUser.full_name || selectedUser.email?.split('@')[0]}
                     </h3>
-                    {ranking.length > 1 && selectedUser.id === ranking[ranking.length - 1].id && (
-                      <span className="self-center px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1.5 w-fit shadow-lg shadow-red-500/5">
-                        <Flashlight size={14} className="animate-pulse text-red-400 drop-shadow-[0_0_6px_rgba(239,68,68,0.8)]" /> Lanterna
-                      </span>
-                    )}
                   </div>
-                  {selectedUser.username && (
-                    <p className="text-xs font-bold text-emerald-400 mt-0.5">@{selectedUser.username}</p>
-                  )}
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-2">Pontos Acumulados: <span className="text-emerald-400 font-black">{selectedUser.points || 0}</span></p>
                 </div>
               </div>

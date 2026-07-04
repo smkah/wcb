@@ -17,11 +17,33 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: 'Bolão Copa 2026',
   description: 'O melhor bolão da Copa do Mundo 2026. Desafie seus amigos!',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Bolão Copa 2026',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(
+                    function(reg) { console.log('SW registered:', reg.scope); },
+                    function(err) { console.log('SW failed:', err); }
+                  );
+                });
+              }
+            `
+          }}
+        />
+      </head>
       <body
         className={`${inter.variable} ${spaceGrotesk.variable} font-sans min-h-screen content-selection`}
         suppressHydrationWarning
