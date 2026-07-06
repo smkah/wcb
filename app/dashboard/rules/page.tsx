@@ -247,6 +247,128 @@ export default function RulesPage() {
               </div>
             </motion.section>
 
+            {/* Seção 3: Palpites do Torneio (Extras) */}
+            <motion.section 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+              className="glass p-6 md:p-8 rounded-[32px] border border-slate-700/50 space-y-6 relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-48 h-48 bg-rose-500/5 rounded-full blur-3xl" />
+
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-400">
+                  <Award size={22} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold uppercase tracking-tight text-white">Palpites Finais (Extras)</h2>
+                  <p className="text-xs text-slate-400">Previsões sobre a classificação geral e destaques do campeonato</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Campeão */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-rose-500/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg">
+                      +15 Pontos
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-black">Campeão</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Campeão do Torneio</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Escolha a seleção que levantará a taça e se consagrará campeã mundial.
+                  </p>
+                </div>
+
+                {/* Segundo Lugar */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-rose-500/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg">
+                      +12 Pontos
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-black">Vice</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Segundo Lugar</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Escolha qual equipe ficará com a medalha de prata como vice-campeã.
+                  </p>
+                </div>
+
+                {/* Terceiro Lugar */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-rose-500/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg">
+                      +10 Pontos
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-black">Bronze</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Terceiro Lugar</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Escolha a seleção que vencerá a disputa pelo 3º lugar do torneio.
+                  </p>
+                </div>
+
+                {/* Craque do Campeonato */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-rose-500/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg">
+                      +10 Pontos
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-black">MVP</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Craque do Campeonato</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Palpite no jogador que será eleito o melhor jogador oficial da Copa do Mundo (Bola de Ouro).
+                  </p>
+                </div>
+
+                {/* Artilheiro */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-rose-500/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg">
+                      +8 Pontos
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-black">Artilheiro</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Artilheiro da Copa</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Aquele jogador que marcará o maior número de gols (Chuteira de Ouro).
+                  </p>
+                </div>
+
+                {/* Melhor Ataque */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-rose-500/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg">
+                      +6 Pontos
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-black">Ataque</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Melhor Ataque</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Seleção que somará o maior número de gols marcados em todo o campeonato.
+                  </p>
+                </div>
+
+                {/* Melhor Defesa */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-rose-500/30 transition-all">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase tracking-widest text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-lg">
+                      +6 Pontos
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-black">Defesa</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white mb-1">Melhor Defesa</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Seleção que sofrerá a menor quantidade de gols em toda a sua participação.
+                  </p>
+                </div>
+
+              </div>
+            </motion.section>
+
           </div>
 
           {/* Sidebar Guidelines Column */}

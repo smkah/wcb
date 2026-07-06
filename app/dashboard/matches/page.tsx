@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Filter, Save, Loader2, CheckCircle2, LayoutGrid, List as ListIcon, Edit2, LayoutList, RefreshCw, History, BarChart2, Eye, EyeOff, Lock } from 'lucide-react';
+import { Calendar, Filter, Save, Loader2, CheckCircle2, LayoutGrid, List as ListIcon, Edit2, LayoutList, RefreshCw, History, BarChart2, Eye, EyeOff, Lock, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Flag from 'react-world-flags';
 import { supabase } from '@/lib/supabase';
@@ -25,11 +25,21 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [userGroups, setUserGroups] = useState<any[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<'matches' | 'standings'>('matches');
+  const [activeSubTab, setActiveSubTab] = useState<'matches' | 'standings' | 'tournament'>('matches');
   const [groupBy, setGroupBy] = useState<'phase' | 'date'>('date');
   const [hideFinished, setHideFinished] = useState<boolean>(true);
   const [groupPredictions, setGroupPredictions] = useState<Record<string, { firstPlace: string, secondPlace: string, thirdPlace: string, thirdPlaceQualified: boolean }>>({});
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
+  const [tournamentPred, setTournamentPred] = useState<any>({
+    champion: '',
+    second_place: '',
+    third_place: '',
+    craque: '',
+    artilheiro: '',
+    best_attack: '',
+    best_defense: ''
+  });
+  const [savingTournament, setSavingTournament] = useState(false);
   const [groupResults, setGroupResults] = useState<any[]>([]);
   const [historyModal, setHistoryModal] = useState<{ isOpen: boolean; teamA: string; teamB: string }>({
     isOpen: false,
@@ -109,6 +119,25 @@ export default function MatchesPage() {
             setGroupPredictions(predMap);
           }
 
+          // Fetch tournament predictions
+          const { data: tourData } = await supabase
+            .from('tournament_predictions')
+            .select('*')
+            .eq('profile_id', user.id)
+            .maybeSingle();
+
+          if (tourData) {
+            setTournamentPred({
+              champion: tourData.champion || '',
+              second_place: tourData.second_place || '',
+              third_place: tourData.third_place || '',
+              craque: tourData.craque || '',
+              artilheiro: tourData.artilheiro || '',
+              best_attack: tourData.best_attack || '',
+              best_defense: tourData.best_defense || ''
+            });
+          }
+
           // Fetch user groups with custom rules
           const { data: membersData } = await supabase
             .from('group_members')
@@ -134,8 +163,8 @@ export default function MatchesPage() {
 
   const isMatchStarted = (match: any) => {
     if (!match?.date) return false;
-    const matchDateTime = parseMatchDateTime(match.date, match.time);
-    return new Date() > matchDateTime;
+    if (match.score1 !== null && match.score2 !== null) return true;
+    return false; // Se não tem placar (não concluído), permite palpite
   };
 
   const getGroupPredictionsDeadline = () => {
@@ -177,6 +206,13 @@ export default function MatchesPage() {
   };
 
   const isGroupLockedGlobal = isGroupPredictionsLocked();
+
+  const isTournamentPredictionsLocked = () => {
+    if (isAdmin) return false;
+    const deadline = new Date('2026-07-09T11:59:00-03:00');
+    return new Date() > deadline;
+  };
+  const isTournamentLocked = isTournamentPredictionsLocked();
 
   const getPhaseName = (round: string, group?: string) => {
     const r = round.toLowerCase();
@@ -423,6 +459,263 @@ export default function MatchesPage() {
         [team === 'A' ? 'scoreA' : 'scoreB']: value.replace(/[^0-9]/g, '')
       }
     }));
+  };
+
+  const allTeams = React.useMemo(() => {
+    const teams = new Set<string>();
+    matches.forEach(m => {
+      const isRealTeam = (t: string) => {
+        if (!t) return false;
+        if (t.match(/[0-9]/)) return false;
+        if (t.includes('/')) return false;
+        if (t.startsWith('W') || t.startsWith('L') || t.startsWith('Venc.') || t.startsWith('Perd.')) return false;
+        return true;
+      };
+      if (isRealTeam(m.team1)) teams.add(m.team1);
+      if (isRealTeam(m.team2)) teams.add(m.team2);
+    });
+    return Array.from(teams).sort((a, b) => a.localeCompare(b));
+  }, [matches]);
+
+  const handleSaveTournamentPred = async () => {
+    if (!user) {
+      toast.error("Você precisa estar logado para salvar palpites!");
+      return;
+    }
+    if (isTournamentLocked) {
+      toast.error("O prazo para salvar palpites extras encerrou!");
+      return;
+    }
+
+    setSavingTournament(true);
+    const toastId = toast.loading("Salvando seus palpites extras...");
+    try {
+      const { error } = await supabase
+        .from('tournament_predictions')
+        .upsert({
+          profile_id: user.id,
+          champion: tournamentPred.champion || null,
+          second_place: tournamentPred.second_place || null,
+          third_place: tournamentPred.third_place || null,
+          craque: tournamentPred.craque || null,
+          artilheiro: tournamentPred.artilheiro || null,
+          best_attack: tournamentPred.best_attack || null,
+          best_defense: tournamentPred.best_defense || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'profile_id' });
+
+      if (error) throw error;
+      toast.success("Palpites do torneio salvos com sucesso!", { id: toastId });
+    } catch (err: any) {
+      toast.error("Erro ao salvar palpites: " + (err.message || "Tente novamente"), { id: toastId });
+    } finally {
+      setSavingTournament(false);
+    }
+  };
+
+  const handleAIPredictTournamentResults = async () => {
+    if (isTournamentLocked) {
+      toast.error("O prazo para predição por IA encerrou!");
+      return;
+    }
+    const toastId = toast.loading("Analisando estatísticas e simulando o torneio...");
+    try {
+      // 1. Calcular TSI (Team Strength Index) e estatísticas de cada seleção
+      const stats: Record<string, { points: number, matches: number, gs: number, gc: number }> = {};
+      
+      matches.forEach(m => {
+        const isRealTeam = (t: string) => {
+          if (!t) return false;
+          if (t.match(/[0-9]/)) return false;
+          if (t.includes('/')) return false;
+          if (t.startsWith('W') || t.startsWith('L') || t.startsWith('Venc.') || t.startsWith('Perd.')) return false;
+          return true;
+        };
+
+        const addStats = (team: string, goalsScored: number, goalsConceded: number, pts: number) => {
+          if (!stats[team]) {
+            stats[team] = { points: 0, matches: 0, gs: 0, gc: 0 };
+          }
+          stats[team].points += pts;
+          stats[team].matches += 1;
+          stats[team].gs += goalsScored;
+          stats[team].gc += goalsConceded;
+        };
+
+        if (m.score1 !== null && m.score2 !== null) {
+          const s1 = Number(m.score1);
+          const s2 = Number(m.score2);
+          if (isRealTeam(m.team1)) {
+            addStats(m.team1, s1, s2, s1 > s2 ? 3 : s1 === s2 ? 1 : 0);
+          }
+          if (isRealTeam(m.team2)) {
+            addStats(m.team2, s2, s1, s2 > s1 ? 3 : s1 === s2 ? 1 : 0);
+          }
+        }
+      });
+
+      // Função auxiliar para obter o TSI de um time
+      const getTSI = (team: string) => {
+        const teamStats = stats[team];
+        if (!teamStats || teamStats.matches === 0) return { tsi: 1.0, gd: 0, gs: 0 };
+        return {
+          tsi: teamStats.points / teamStats.matches,
+          gd: teamStats.gs - teamStats.gc,
+          gs: teamStats.gs
+        };
+      };
+
+      // 2. Determinar Melhor Ataque e Melhor Defesa baseados nos jogos reais concluídos
+      let bestAttackTeam = '';
+      let maxGoalsScored = -1;
+      let bestDefenseTeam = '';
+      let minAvgGoalsConceded = 999;
+
+      Object.keys(stats).forEach(team => {
+        const teamStats = stats[team];
+        if (teamStats.gs > maxGoalsScored) {
+          maxGoalsScored = teamStats.gs;
+          bestAttackTeam = team;
+        }
+        
+        if (teamStats.matches >= 3) {
+          const avgGc = teamStats.gc / teamStats.matches;
+          if (avgGc < minAvgGoalsConceded) {
+            minAvgGoalsConceded = avgGc;
+            bestDefenseTeam = team;
+          }
+        }
+      });
+
+      if (!bestAttackTeam && allTeams.length > 0) {
+        bestAttackTeam = allTeams[0];
+      }
+      if (!bestDefenseTeam && allTeams.length > 0) {
+        bestDefenseTeam = allTeams[0];
+      }
+
+      // 3. Simular fase eliminatória (Mata-Mata)
+      const knockoutMatches = matches
+        .filter(m => m.round && !m.group)
+        .sort((a, b) => {
+          const idA = parseInt(a.id.substring(1), 10);
+          const idB = parseInt(b.id.substring(1), 10);
+          return idA - idB;
+        });
+
+      const simulatedWinners: Record<string, string> = {};
+      const simulatedLosers: Record<string, string> = {};
+
+      knockoutMatches.forEach(m => {
+        const resolveTeamName = (t: string) => {
+          if (!t) return '';
+          if (t.startsWith('W')) {
+            const predId = 'm' + t.substring(1);
+            return simulatedWinners[predId] || t;
+          }
+          if (t.startsWith('L')) {
+            const predId = 'm' + t.substring(1);
+            return simulatedLosers[predId] || t;
+          }
+          return t;
+        };
+
+        const t1 = resolveTeamName(m.team1);
+        const t2 = resolveTeamName(m.team2);
+
+        let winner = '';
+        let loser = '';
+
+        if (m.score1 !== null && m.score2 !== null) {
+          if (Number(m.score1) > Number(m.score2)) {
+            winner = t1;
+            loser = t2;
+          } else {
+            winner = t2;
+            loser = t1;
+          }
+        } else {
+          const info1 = getTSI(t1);
+          const info2 = getTSI(t2);
+
+          if (info1.tsi !== info2.tsi) {
+            winner = info1.tsi > info2.tsi ? t1 : t2;
+            loser = info1.tsi > info2.tsi ? t2 : t1;
+          } else if (info1.gd !== info2.gd) {
+            winner = info1.gd > info2.gd ? t1 : t2;
+            loser = info1.gd > info2.gd ? t2 : t1;
+          } else {
+            winner = info1.gs >= info2.gs ? t1 : t2;
+            loser = info1.gs >= info2.gs ? t2 : t1;
+          }
+        }
+
+        simulatedWinners[m.id] = winner;
+        simulatedLosers[m.id] = loser;
+      });
+
+      const championSim = simulatedWinners['m104'] || '';
+      const secondPlaceSim = simulatedLosers['m104'] || '';
+      const thirdPlaceSim = simulatedWinners['m103'] || '';
+
+      // 4. Buscar opiniões populares para Craque e Artilheiro
+      const { data: allPredictions } = await supabase
+        .from('tournament_predictions')
+        .select('craque, artilheiro');
+
+      let craqueSim = 'Mbappé';
+      let artilheiroSim = 'Haaland';
+
+      if (allPredictions && allPredictions.length > 0) {
+        const craqueCounts: Record<string, number> = {};
+        const artilheiroCounts: Record<string, number> = {};
+
+        allPredictions.forEach(p => {
+          if (p.craque) {
+            const clean = p.craque.trim();
+            if (clean) craqueCounts[clean] = (craqueCounts[clean] || 0) + 1;
+          }
+          if (p.artilheiro) {
+            const clean = p.artilheiro.trim();
+            if (clean) artilheiroCounts[clean] = (artilheiroCounts[clean] || 0) + 1;
+          }
+        });
+
+        let maxCraqueVotes = -1;
+        Object.keys(craqueCounts).forEach(name => {
+          if (craqueCounts[name] > maxCraqueVotes) {
+            maxCraqueVotes = craqueCounts[name];
+            craqueSim = name;
+          }
+        });
+
+        let maxArtilheiroVotes = -1;
+        Object.keys(artilheiroCounts).forEach(name => {
+          if (artilheiroCounts[name] > maxArtilheiroVotes) {
+            maxArtilheiroVotes = artilheiroCounts[name];
+            artilheiroSim = name;
+          }
+        });
+      }
+
+      if (championSim === 'Brasil' && craqueSim === 'Mbappé' && (!allPredictions || allPredictions.length === 0)) {
+        craqueSim = 'Vinícius Júnior';
+      }
+
+      setTournamentPred({
+        champion: championSim,
+        second_place: secondPlaceSim,
+        third_place: thirdPlaceSim,
+        craque: craqueSim,
+        artilheiro: artilheiroSim,
+        best_attack: bestAttackTeam,
+        best_defense: bestDefenseTeam
+      });
+
+      toast.success(`Palpites da IA calculados! ${championSim} previsto campeão.`, { id: toastId });
+    } catch (err: any) {
+      toast.error("Erro na predição da IA: " + (err.message || "Tente novamente"), { id: toastId });
+    }
   };
 
   const handleSaveGuess = async (matchId: string) => {
@@ -1438,7 +1731,7 @@ export default function MatchesPage() {
 
           {/* Sub-tab switcher and Group-by option */}
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-12">
-            <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 w-full md:max-w-md">
+            <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 w-full md:max-w-xl">
               <button
                 onClick={() => setActiveSubTab('matches')}
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'matches'
@@ -1456,6 +1749,15 @@ export default function MatchesPage() {
                   }`}
               >
                 Fase de Grupos (Classificação)
+              </button>
+              <button
+                onClick={() => setActiveSubTab('tournament')}
+                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === 'tournament'
+                  ? 'bg-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                  : 'text-slate-500 hover:text-slate-300'
+                  }`}
+              >
+                Finais & Extras
               </button>
             </div>
 
@@ -1500,7 +1802,7 @@ export default function MatchesPage() {
             )}
           </div>
 
-          {activeSubTab === 'matches' ? (
+          {activeSubTab === 'matches' && (
             visibleMatches.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 glass rounded-[32px] border-dashed border-slate-700/50 text-center w-full">
                 <Calendar className="text-slate-600 mb-4 animate-pulse" size={48} />
@@ -1699,7 +2001,9 @@ export default function MatchesPage() {
                 })}
               </div>
             )
-          ) : (
+          )}
+
+          {activeSubTab === 'standings' && (
             <div className="space-y-12 pb-24">
               <div className="glass p-8 rounded-[32px] border-emerald-500/10">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1896,6 +2200,182 @@ export default function MatchesPage() {
                     </motion.div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {activeSubTab === 'tournament' && (
+            <div className="space-y-12 pb-24">
+              <div className="glass p-8 rounded-[32px] border-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-black uppercase tracking-tight text-white">Palpites Finais & Extras</h2>
+                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Palpite nos destaques e no grande campeão da Copa do Mundo 2026.</p>
+                </div>
+                <button
+                  onClick={handleAIPredictTournamentResults}
+                  disabled={isTournamentLocked}
+                  className="flex items-center gap-2 px-6 py-3.5 bg-rose-500 hover:bg-rose-400 text-white font-black uppercase tracking-widest text-[10px] rounded-xl transition-all shadow-lg shadow-rose-500/10 hover:scale-[1.02] active:scale-95 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed disabled:hover:scale-100 disabled:opacity-40"
+                >
+                  <Sparkles size={14} /> Palpitar com IA (Estatísticas)
+                </button>
+              </div>
+
+              {isTournamentLocked && (
+                <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-[24px] flex items-center gap-3 text-red-400">
+                  <Lock size={16} className="animate-pulse shrink-0" />
+                  <span className="text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                    Prazo encerrado! Não é mais possível salvar ou alterar palpites de Finais & Extras (Encerrado em 09/07/2026 às 11:59).
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                {/* Campeão */}
+                <div className="glass p-6 rounded-3xl border border-slate-700/40 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded font-black uppercase tracking-widest">+15 PTS</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Campeão</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Campeão Mundial</h3>
+                  <select
+                    value={tournamentPred.champion}
+                    disabled={isTournamentLocked}
+                    onChange={e => setTournamentPred((prev: any) => ({ ...prev, champion: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Selecione a Seleção</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Vice-Campeão */}
+                <div className="glass p-6 rounded-3xl border border-slate-700/40 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded font-black uppercase tracking-widest">+12 PTS</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Vice</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Segundo Lugar (Vice)</h3>
+                  <select
+                    value={tournamentPred.second_place}
+                    disabled={isTournamentLocked}
+                    onChange={e => setTournamentPred((prev: any) => ({ ...prev, second_place: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Selecione a Seleção</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Terceiro Lugar */}
+                <div className="glass p-6 rounded-3xl border border-slate-700/40 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded font-black uppercase tracking-widest">+10 PTS</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Bronze</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Terceiro Lugar</h3>
+                  <select
+                    value={tournamentPred.third_place}
+                    disabled={isTournamentLocked}
+                    onChange={e => setTournamentPred((prev: any) => ({ ...prev, third_place: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Selecione a Seleção</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Melhor Ataque */}
+                <div className="glass p-6 rounded-3xl border border-slate-700/40 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded font-black uppercase tracking-widest">+6 PTS</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Ataque</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Melhor Ataque</h3>
+                  <select
+                    value={tournamentPred.best_attack}
+                    disabled={isTournamentLocked}
+                    onChange={e => setTournamentPred((prev: any) => ({ ...prev, best_attack: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Selecione a Seleção</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Melhor Defesa */}
+                <div className="glass p-6 rounded-3xl border border-slate-700/40 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded font-black uppercase tracking-widest">+6 PTS</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Defesa</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Melhor Defesa</h3>
+                  <select
+                    value={tournamentPred.best_defense}
+                    disabled={isTournamentLocked}
+                    onChange={e => setTournamentPred((prev: any) => ({ ...prev, best_defense: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Selecione a Seleção</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Craque do Campeonato */}
+                <div className="glass p-6 rounded-3xl border border-slate-700/40 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded font-black uppercase tracking-widest">+10 PTS</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Craque</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Craque do Campeonato</h3>
+                  <input
+                    type="text"
+                    placeholder="Nome do Jogador"
+                    value={tournamentPred.craque}
+                    disabled={isTournamentLocked}
+                    onChange={e => setTournamentPred((prev: any) => ({ ...prev, craque: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                {/* Artilheiro */}
+                <div className="glass p-6 rounded-3xl border border-slate-700/40 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded font-black uppercase tracking-widest">+8 PTS</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Gols</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Artilheiro da Copa</h3>
+                  <input
+                    type="text"
+                    placeholder="Nome do Jogador"
+                    value={tournamentPred.artilheiro}
+                    disabled={isTournamentLocked}
+                    onChange={e => setTournamentPred((prev: any) => ({ ...prev, artilheiro: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </div>
+
+              </div>
+
+              <div className="flex justify-center mt-12">
+                <button
+                  onClick={handleSaveTournamentPred}
+                  disabled={savingTournament || isTournamentLocked}
+                  className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-emerald-500/10 flex items-center gap-2 hover:scale-[1.02] active:scale-95 disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  {savingTournament ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  Salvar Palpites Extras
+                </button>
               </div>
             </div>
           )}

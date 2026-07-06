@@ -696,5 +696,53 @@ export const adminApi = {
         if (updErr) throw updErr;
       }
     }
+  },
+
+  async getTournamentPredictions(profileId: string) {
+    const { data, error } = await supabase
+      .from('tournament_predictions')
+      .select('*')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async saveTournamentPredictions(profileId: string, predictions: any) {
+    const { data, error } = await supabase
+      .from('tournament_predictions')
+      .upsert({
+        profile_id: profileId,
+        ...predictions,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'profile_id' });
+
+    if (error) throw error;
+    return data;
+  },
+
+  async getTournamentResults() {
+    const { data, error } = await supabase
+      .from('tournament_results')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async saveTournamentResults(results: any) {
+    const { data, error } = await supabase
+      .from('tournament_results')
+      .upsert({
+        id: 1,
+        ...results,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (error) throw error;
+    return data;
   }
 };

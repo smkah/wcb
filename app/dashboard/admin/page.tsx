@@ -11,7 +11,7 @@ import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { formatMatchDate, formatMatchTime, mapMatchesToBrazil } from '@/lib/utils';
 
-type TabType = 'overview' | 'users' | 'groups' | 'matches' | 'standings';
+type TabType = 'overview' | 'users' | 'groups' | 'matches' | 'standings' | 'tournament';
 
 const getPhaseName = (round: string, group?: string) => {
   const r = round.toLowerCase();
@@ -59,6 +59,16 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [groupResults, setGroupResults] = useState<any[]>([]);
   const [savingStanding, setSavingStanding] = useState<string | null>(null);
+  const [tournamentResults, setTournamentResults] = useState<any>({
+    champion: '',
+    second_place: '',
+    third_place: '',
+    craque: '',
+    artilheiro: '',
+    best_attack: '',
+    best_defense: ''
+  });
+  const [savingTournamentResults, setSavingTournamentResults] = useState(false);
   
   // Data state
   const [data, setData] = useState({
@@ -195,6 +205,26 @@ export default function AdminPage() {
     if (resData) setGroupResults(resData);
   };
 
+  const fetchTournamentResults = async () => {
+    const { data: tourRes } = await supabase
+      .from('tournament_results')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+      
+    if (tourRes) {
+      setTournamentResults({
+        champion: tourRes.champion || '',
+        second_place: tourRes.second_place || '',
+        third_place: tourRes.third_place || '',
+        craque: tourRes.craque || '',
+        artilheiro: tourRes.artilheiro || '',
+        best_attack: tourRes.best_attack || '',
+        best_defense: tourRes.best_defense || ''
+      });
+    }
+  };
+
   useEffect(() => {
     const checkUser = async () => {
       if (!isSupabaseConfigured) return;
@@ -212,11 +242,57 @@ export default function AdminPage() {
         }
         await fetchAllData();
         await fetchGroupResults();
+        await fetchTournamentResults();
       }
       setLoading(false);
     };
     checkUser();
   }, [router]);
+
+  const allTeams = React.useMemo(() => {
+    const teams = new Set<string>();
+    data.matches.forEach(m => {
+      const isRealTeam = (t: string) => {
+        if (!t) return false;
+        if (t.match(/[0-9]/)) return false;
+        if (t.includes('/')) return false;
+        if (t.startsWith('W') || t.startsWith('L') || t.startsWith('Venc.') || t.startsWith('Perd.')) return false;
+        return true;
+      };
+      if (isRealTeam(m.team1)) teams.add(m.team1);
+      if (isRealTeam(m.team2)) teams.add(m.team2);
+    });
+    return Array.from(teams).sort((a, b) => a.localeCompare(b));
+  }, [data.matches]);
+
+  const handleSaveTournamentResults = async () => {
+    setSavingTournamentResults(true);
+    const toastId = toast.loading("Salvando resultados oficiais do torneio...");
+    try {
+      const { error } = await supabase
+        .from('tournament_results')
+        .upsert({
+          id: 1,
+          champion: tournamentResults.champion || null,
+          second_place: tournamentResults.second_place || null,
+          third_place: tournamentResults.third_place || null,
+          craque: tournamentResults.craque || null,
+          artilheiro: tournamentResults.artilheiro || null,
+          best_attack: tournamentResults.best_attack || null,
+          best_defense: tournamentResults.best_defense || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+
+      if (error) throw error;
+      toast.success("Resultados oficiais salvos com sucesso e pontos recalculados!", { id: toastId });
+    } catch (err: any) {
+      toast.error("Erro ao salvar resultados: " + (err.message || "Tente novamente"), { id: toastId });
+    } finally {
+      setSavingTournamentResults(false);
+    }
+  };
+
+
 
 
 
@@ -520,7 +596,7 @@ export default function AdminPage() {
           </div>
 
           <div className="flex flex-wrap sm:flex-nowrap bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50 gap-1 sm:gap-0 w-full sm:w-auto">
-            {(['overview', 'users', 'groups', 'matches', 'standings'] as TabType[]).map((tab) => (
+            {(['overview', 'users', 'groups', 'matches', 'standings', 'tournament'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -530,7 +606,7 @@ export default function AdminPage() {
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                {tab === 'overview' ? 'Geral' : tab === 'users' ? 'Usuários' : tab === 'groups' ? 'Bolões' : tab === 'matches' ? 'Jogos' : 'Grupos (Classificação)'}
+                {tab === 'overview' ? 'Geral' : tab === 'users' ? 'Usuários' : tab === 'groups' ? 'Bolões' : tab === 'matches' ? 'Jogos' : tab === 'standings' ? 'Grupos (Classificação)' : 'Resultados Torneio'}
               </button>
             ))}
           </div>
@@ -1529,6 +1605,136 @@ export default function AdminPage() {
                     </div>
                   );
                 })}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'tournament' && (
+            <motion.div
+              key="tournament"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="glass p-10 rounded-[40px] space-y-10"
+            >
+              <div>
+                <h2 className="text-2xl font-black uppercase tracking-tighter">RESULTADOS FINAIS DO TORNEIO (REAL)</h2>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
+                  Defina os campeões e destaques oficiais do torneio para computar a pontuação extra dos participantes.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                
+                {/* Campeão */}
+                <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-2">
+                  <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Campeão Oficial (+15 pts)</label>
+                  <select
+                    value={tournamentResults.champion}
+                    onChange={e => setTournamentResults((prev: any) => ({ ...prev, champion: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                  >
+                    <option value="">Não definido...</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Vice-Campeão */}
+                <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-2">
+                  <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Segundo Lugar (+12 pts)</label>
+                  <select
+                    value={tournamentResults.second_place}
+                    onChange={e => setTournamentResults((prev: any) => ({ ...prev, second_place: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                  >
+                    <option value="">Não definido...</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Terceiro Lugar */}
+                <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-2">
+                  <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Terceiro Lugar (+10 pts)</label>
+                  <select
+                    value={tournamentResults.third_place}
+                    onChange={e => setTournamentResults((prev: any) => ({ ...prev, third_place: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                  >
+                    <option value="">Não definido...</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Melhor Ataque */}
+                <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-2">
+                  <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Melhor Ataque Oficial (+6 pts)</label>
+                  <select
+                    value={tournamentResults.best_attack}
+                    onChange={e => setTournamentResults((prev: any) => ({ ...prev, best_attack: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                  >
+                    <option value="">Não definido...</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Melhor Defesa */}
+                <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-2">
+                  <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Melhor Defesa Oficial (+6 pts)</label>
+                  <select
+                    value={tournamentResults.best_defense}
+                    onChange={e => setTournamentResults((prev: any) => ({ ...prev, best_defense: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                  >
+                    <option value="">Não definido...</option>
+                    {allTeams.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Craque do Campeonato */}
+                <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-2">
+                  <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Craque Oficial (+10 pts)</label>
+                  <input
+                    type="text"
+                    placeholder="Nome do Craque"
+                    value={tournamentResults.craque}
+                    onChange={e => setTournamentResults((prev: any) => ({ ...prev, craque: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
+                {/* Artilheiro */}
+                <div className="p-6 bg-slate-900/50 rounded-3xl border border-slate-800 space-y-2">
+                  <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Artilheiro Oficial (+8 pts)</label>
+                  <input
+                    type="text"
+                    placeholder="Nome do Artilheiro"
+                    value={tournamentResults.artilheiro}
+                    onChange={e => setTournamentResults((prev: any) => ({ ...prev, artilheiro: e.target.value }))}
+                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl font-bold text-xs text-white focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
+              </div>
+
+              <div className="flex justify-center mt-12">
+                <button
+                  onClick={handleSaveTournamentResults}
+                  disabled={savingTournamentResults}
+                  className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-emerald-500/10 flex items-center gap-2 hover:scale-[1.02] active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {savingTournamentResults ? <RefreshCw size={16} className="animate-spin" /> : <Trophy size={16} />}
+                  Salvar Resultados Oficiais
+                </button>
               </div>
             </motion.div>
           )}
