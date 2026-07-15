@@ -80,6 +80,9 @@ export default function AdminPage() {
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [allGuesses, setAllGuesses] = useState<any[]>([]);
   const [allGroupPredictions, setAllGroupPredictions] = useState<any[]>([]);
+  const [allTournamentPredictions, setAllTournamentPredictions] = useState<any[]>([]);
+  const [filterPending, setFilterPending] = useState<boolean>(false);
+  const [userSearch, setUserSearch] = useState<string>('');
 
   const [matchGroupBy, setMatchGroupBy] = useState<'date' | 'phase'>('date');
   const [hideFinishedMatches, setHideFinishedMatches] = useState<boolean>(false);
@@ -173,7 +176,7 @@ export default function AdminPage() {
   const fetchAllData = async () => {
     if (!isSupabaseConfigured) return;
     try {
-      const [users, groups, matches, guessesRes, groupPredsRes] = await Promise.all([
+      const [users, groups, matches, guessesRes, groupPredsRes, tournamentPredsRes] = await Promise.all([
         adminApi.getUsers().catch(e => { 
           console.error("Users fetch error:", e?.message || e); 
           return []; 
@@ -187,12 +190,14 @@ export default function AdminPage() {
           return []; 
         }),
         supabase.from('guesses').select('profile_id, match_id, score1, score2').then(res => res.data || []),
-        supabase.from('group_predictions').select('profile_id, group_letter').then(res => res.data || [])
+        supabase.from('group_predictions').select('profile_id, group_letter').then(res => res.data || []),
+        supabase.from('tournament_predictions').select('*').then(res => res.data || [])
       ]);
-      console.log("Fetched admin data:", { usersCount: users.length, groupsCount: groups.length, matchesCount: matches.length, guessesCount: guessesRes.length, groupPredsCount: groupPredsRes.length });
+      console.log("Fetched admin data:", { usersCount: users.length, groupsCount: groups.length, matchesCount: matches.length, guessesCount: guessesRes.length, groupPredsCount: groupPredsRes.length, tournamentPredsCount: tournamentPredsRes.length });
       setData({ users: users || [], groups: groups || [], matches: mapMatchesToBrazil(matches || []) });
       setAllGuesses(guessesRes || []);
       setAllGroupPredictions(groupPredsRes || []);
+      setAllTournamentPredictions(tournamentPredsRes || []);
     } catch (error) {
       console.error("Error fetching admin data:", error);
     } finally {
@@ -304,6 +309,66 @@ export default function AdminPage() {
     });
     return counts;
   }, [data.matches]);
+
+  const getUserGroupPredictionsCount = (profileId: string) => {
+    return allGroupPredictions.filter(p => p.profile_id === profileId).length;
+  };
+
+  const getUserFinalGuessesCount = (profileId: string) => {
+    const finalMatches = data.matches.filter(m => getPhaseName(m.round, m.group) === 'FINAL');
+    if (finalMatches.length === 0) return { completed: 0, total: 0 };
+    const completed = allGuesses.filter(g => 
+      g.profile_id === profileId && 
+      finalMatches.some(m => m.id === g.match_id) && 
+      g.score1 !== null && 
+      g.score2 !== null
+    ).length;
+    return { completed, total: finalMatches.length };
+  };
+
+  const getUserTournamentPredictionsCount = (profileId: string) => {
+    const pred = allTournamentPredictions.find(p => p.profile_id === profileId);
+    if (!pred) return 0;
+    let count = 0;
+    if (pred.champion) count++;
+    if (pred.second_place) count++;
+    if (pred.third_place) count++;
+    if (pred.craque) count++;
+    if (pred.artilheiro) count++;
+    if (pred.best_attack) count++;
+    if (pred.best_defense) count++;
+    return count;
+  };
+
+  const filteredUsers = React.useMemo(() => {
+    return data.users.filter(u => {
+      const name = (u.full_name || '').toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      const search = userSearch.toLowerCase();
+      const matchesSearch = name.includes(search) || email.includes(search);
+      if (!matchesSearch) return false;
+
+      if (filterPending) {
+        const { completed, total } = getUserFinalGuessesCount(u.id);
+        const finalMatchesDone = total === 0 || completed === total;
+        const extraCount = getUserTournamentPredictionsCount(u.id);
+        const extrasDone = extraCount === 7;
+        return !finalMatchesDone || !extrasDone;
+      }
+
+      return true;
+    });
+  }, [data.users, userSearch, filterPending, allGuesses, allTournamentPredictions, data.matches]);
+
+  const pendingUsersCount = React.useMemo(() => {
+    return data.users.filter(u => {
+      const { completed, total } = getUserFinalGuessesCount(u.id);
+      const finalMatchesDone = total === 0 || completed === total;
+      const extraCount = getUserTournamentPredictionsCount(u.id);
+      const extrasDone = extraCount === 7;
+      return !finalMatchesDone || !extrasDone;
+    }).length;
+  }, [data.users, allGuesses, allTournamentPredictions, data.matches]);
 
   if (!isSupabaseConfigured) {
     return (
@@ -575,9 +640,7 @@ export default function AdminPage() {
     return completedCounts;
   };
 
-  const getUserGroupPredictionsCount = (profileId: string) => {
-    return allGroupPredictions.filter(p => p.profile_id === profileId).length;
-  };
+
 
   return (
     <div className="min-h-screen bg-[#0F172A] text-slate-100">
@@ -1122,8 +1185,25 @@ export default function AdminPage() {
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="relative">
                      <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                     <input type="text" placeholder="BUSCAR USUÁRIO..." className="pl-12 pr-6 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold focus:border-emerald-500 outline-none transition-all uppercase tracking-widest" />
+                     <input 
+                       type="text" 
+                       placeholder="BUSCAR USUÁRIO..." 
+                       value={userSearch}
+                       onChange={(e) => setUserSearch(e.target.value)}
+                       className="pl-12 pr-6 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold focus:border-emerald-500 outline-none transition-all uppercase tracking-widest text-white" 
+                     />
                   </div>
+                  <button 
+                    onClick={() => setFilterPending(!filterPending)}
+                    className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold transition-all border ${
+                      filterPending 
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' 
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <AlertTriangle size={14} /> 
+                    {filterPending ? 'Ver Todos' : 'Pendentes Final/Extras'}
+                  </button>
                   <button 
                     onClick={() => setEditingItem({ type: 'add_user', data: { email: '', password: '', username: '', full_name: '' } })} 
                     className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/10"
@@ -1133,8 +1213,42 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {/* Resumo de palpites pendentes */}
+              {pendingUsersCount > 0 ? (
+                <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="text-amber-400 shrink-0" size={20} />
+                    <div>
+                      <p className="text-xs font-black uppercase text-amber-400 tracking-wider">Atenção Admin</p>
+                      <p className="text-xs font-bold text-slate-300">
+                        {pendingUsersCount === 1 
+                          ? '1 usuário ainda não completou os palpites da Final ou Extras.'
+                          : `${pendingUsersCount} usuários ainda não completaram os palpites da Final ou Extras.`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  {!filterPending && (
+                    <button 
+                      onClick={() => setFilterPending(true)}
+                      className="px-4 py-2 bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-400 transition-all shrink-0 font-bold"
+                    >
+                      Filtrar Pendentes
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3">
+                  <CheckCircle2 className="text-emerald-400" size={20} />
+                  <div>
+                    <p className="text-xs font-black uppercase text-emerald-400 tracking-wider">Tudo Pronto!</p>
+                    <p className="text-xs font-bold text-slate-300">Todos os usuários cadastrados já preencheram seus palpites da Final e Extras.</p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-4">
-                {data.users.map(u => (
+                {filteredUsers.map(u => (
                   <div key={u.id} className="flex flex-col p-5 bg-slate-900/50 rounded-2xl border border-slate-700/50 group hover:border-emerald-500/30 transition-all gap-4">
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center gap-6">
@@ -1144,7 +1258,7 @@ export default function AdminPage() {
                         <div>
                           <p className="font-black text-white">{u.full_name || 'Sem Nome'}</p>
                           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{u.email}</p>
-                          <div className="flex items-center gap-2 mt-1.5">
+                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
                             {(() => {
                               const groupPredsCount = getUserGroupPredictionsCount(u.id);
                               return (
@@ -1155,7 +1269,37 @@ export default function AdminPage() {
                                       ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                                       : 'bg-slate-950 text-slate-500 border-slate-800'
                                 }`}>
-                                  Classificação de Grupo: {groupPredsCount}/12 Grupos
+                                  Classificação de Grupo: {groupPredsCount}/12
+                                </span>
+                              );
+                            })()}
+                            {(() => {
+                              const { completed, total } = getUserFinalGuessesCount(u.id);
+                              const isCompleted = total > 0 && completed === total;
+                              return (
+                                <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${
+                                  isCompleted 
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                    : completed > 0
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                      : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                }`}>
+                                  Palpite da Final: {completed}/{total}
+                                </span>
+                              );
+                            })()}
+                            {(() => {
+                              const extraCount = getUserTournamentPredictionsCount(u.id);
+                              const isCompleted = extraCount === 7;
+                              return (
+                                <span className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-wider border ${
+                                  isCompleted 
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                    : extraCount > 0
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                      : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                }`}>
+                                  Extras (Torneio): {extraCount}/7
                                 </span>
                               );
                             })()}
@@ -1202,10 +1346,10 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
-                {data.users.length === 0 && (
+                {filteredUsers.length === 0 && (
                   <div className="py-20 text-center opacity-50">
                     <Users size={48} className="mx-auto mb-4 text-slate-700" />
-                    <p className="text-xs font-black uppercase tracking-[0.2em]">Nenhum usuário encontrado na tabela profiles</p>
+                    <p className="text-xs font-black uppercase tracking-[0.2em]">Nenhum usuário encontrado</p>
                   </div>
                 )}
               </div>

@@ -73,6 +73,15 @@ export default function Dashboard() {
   const [top3Profiles, setTop3Profiles] = useState<any[]>([]);
   const [next3DaysMatches, setNext3DaysMatches] = useState<any[]>([]);
   
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
+  const [allTournamentPredictions, setAllTournamentPredictions] = useState<any[]>([]);
+  const [tournamentResults, setTournamentResults] = useState<any>(null);
+  const [searchPreds, setSearchPreds] = useState<string>('');
+  const [collapsedCards, setCollapsedCards] = useState<Record<string, boolean>>({});
+
+  const toggleCardCollapse = (cardId: string) => {
+    setCollapsedCards(prev => ({ ...prev, [cardId]: !prev[cardId] }));
+  };
   // Today's matches states
   const [todayMatches, setTodayMatches] = useState<any[]>([]);
   const [todayGuesses, setTodayGuesses] = useState<Record<string, { score1: string, score2: string, yellow_cards_winner?: string, has_red_card?: boolean, points_earned?: number }>>({});
@@ -96,6 +105,31 @@ export default function Dashboard() {
   const [loadingKnockout, setLoadingKnockout] = useState(false);
   const [allMatches, setAllMatches] = useState<any[]>([]);
   const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
+
+  const filteredProfilesForPreds = React.useMemo(() => {
+    return allProfiles.filter(p => {
+      const name = (p.full_name || '').toLowerCase();
+      const username = (p.username || '').toLowerCase();
+      const query = searchPreds.toLowerCase();
+      return name.includes(query) || username.includes(query);
+    });
+  }, [allProfiles, searchPreds]);
+
+  const renderPredCell = (predVal: string | undefined | null, resultVal: string | undefined | null, points: number) => {
+    if (!predVal) return <span className="text-slate-600 italic">Pendente</span>;
+    if (!resultVal) return <span className="text-slate-300 font-bold uppercase">{predVal}</span>;
+    const isMatch = predVal.trim().toLowerCase() === resultVal.trim().toLowerCase();
+    return (
+      <div className="flex flex-col">
+        <span className={`font-black uppercase tracking-tight ${isMatch ? 'text-emerald-400' : 'text-rose-500/80'}`}>
+          {predVal}
+        </span>
+        <span className={`text-[8px] font-black uppercase tracking-wide mt-0.5 ${isMatch ? 'text-emerald-500/80' : 'text-rose-600/70'}`}>
+          {isMatch ? `+${points} pts ✓` : '0 pts ✗'}
+        </span>
+      </div>
+    );
+  };
 
   const toggleStageCollapse = (stage: string) => {
     setCollapsedStages(prev => ({ ...prev, [stage]: !prev[stage] }));
@@ -180,6 +214,27 @@ export default function Dashboard() {
             setUserGroups(processedGroups);
             setSelectedGroupId(processedGroups[0].id);
           }
+
+          // Fetch all profiles
+          const { data: allProfilesData } = await supabase
+            .from('profiles')
+            .select('id, full_name, username, avatar_url, points')
+            .order('points', { ascending: false });
+          if (allProfilesData) setAllProfiles(allProfilesData);
+
+          // Fetch all tournament predictions
+          const { data: allPredsData } = await supabase
+            .from('tournament_predictions')
+            .select('*');
+          if (allPredsData) setAllTournamentPredictions(allPredsData);
+
+          // Fetch official tournament results
+          const { data: tResults } = await supabase
+            .from('tournament_results')
+            .select('*')
+            .eq('id', 1)
+            .maybeSingle();
+          if (tResults) setTournamentResults(tResults);
 
           // Update initial stats
           const totalPoints = profile?.points || 0;
@@ -634,185 +689,195 @@ export default function Dashboard() {
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                   <h4 className="text-sm font-black uppercase tracking-[0.2em] text-emerald-400">Jogos de Hoje</h4>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
+                  </span>
+                  <button 
+                    onClick={() => toggleCardCollapse('todayMatches')}
+                    className="text-[10px] font-black text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest"
+                  >
+                    {collapsedCards['todayMatches'] ? 'Expandir ▾' : 'Minimizar ▴'}
+                  </button>
+                </div>
               </div>
 
-              {todayMatches.length > 0 ? (
-                <div className="flex flex-col gap-8 divide-y divide-slate-800/60">
-                  {todayMatches.map((match, idx) => {
-                    const guess = todayGuesses[match.id] || { score1: '', score2: '', yellow_cards_winner: '', has_red_card: undefined };
-                    const isSaving = savingTodayGuess[match.id] || false;
-                    const isSaved = savedTodayGuess[match.id] || false;
-                    const isStarted = isMatchStarted(match);
-                    const isEnded = match.score1 !== null && match.score2 !== null;
+              {!collapsedCards['todayMatches'] && (
+                todayMatches.length > 0 ? (
+                  <div className="flex flex-col gap-8 divide-y divide-slate-800/60">
+                    {todayMatches.map((match, idx) => {
+                      const guess = todayGuesses[match.id] || { score1: '', score2: '', yellow_cards_winner: '', has_red_card: undefined };
+                      const isSaving = savingTodayGuess[match.id] || false;
+                      const isSaved = savedTodayGuess[match.id] || false;
+                      const isStarted = isMatchStarted(match);
+                      const isEnded = match.score1 !== null && match.score2 !== null;
 
-                    return (
-                      <div key={match.id} className={`flex flex-col gap-4 ${idx > 0 ? 'pt-8' : ''} ${isEnded ? 'opacity-50 grayscale' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="px-3 py-0.5 glass-emerald text-emerald-400 text-[9px] font-black rounded-lg uppercase tracking-widest">
-                            {match.round}
-                          </span>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            {formatMatchTime(match.time)}
-                          </span>
-                        </div>
+                      return (
+                        <div key={match.id} className={`flex flex-col gap-4 ${idx > 0 ? 'pt-8' : ''} ${isEnded ? 'opacity-50 grayscale' : ''}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="px-3 py-0.5 glass-emerald text-emerald-400 text-[9px] font-black rounded-lg uppercase tracking-widest">
+                              {match.round}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                              {formatMatchTime(match.time)}
+                            </span>
+                          </div>
 
-                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                          {/* Match Teams and Scores */}
-                          <div className="flex items-center gap-2 sm:gap-4 justify-center w-full md:w-auto flex-1">
-                            {/* Team A */}
-                            <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                              <span className="font-bold text-xs sm:text-sm uppercase truncate text-right">{match.team1}</span>
-                              <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                                <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
+                          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                            {/* Match Teams and Scores */}
+                            <div className="flex items-center gap-2 sm:gap-4 justify-center w-full md:w-auto flex-1">
+                              {/* Team A */}
+                              <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                                <span className="font-bold text-xs sm:text-sm uppercase truncate text-right">{match.team1}</span>
+                                <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                                  <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
+                                </div>
+                              </div>
+
+                              {/* Inputs */}
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <input
+                                  type="text"
+                                  value={guess.score1}
+                                  onChange={(e) => handleTodayScoreChange(match.id, 1, e.target.value)}
+                                  disabled={isStarted}
+                                  className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-base focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                  placeholder="0"
+                                />
+                                <span className="font-black text-slate-700 italic text-sm">X</span>
+                                <input
+                                  type="text"
+                                  value={guess.score2}
+                                  onChange={(e) => handleTodayScoreChange(match.id, 2, e.target.value)}
+                                  disabled={isStarted}
+                                  className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-base focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                  placeholder="0"
+                                />
+                              </div>
+
+                              {/* Team B */}
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                                  <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
+                                </div>
+                                <span className="font-bold text-xs sm:text-sm uppercase truncate text-left">{match.team2}</span>
                               </div>
                             </div>
 
-                            {/* Inputs */}
-                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                              <input
-                                type="text"
-                                value={guess.score1}
-                                onChange={(e) => handleTodayScoreChange(match.id, 1, e.target.value)}
-                                disabled={isStarted}
-                                className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-base focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                placeholder="0"
-                              />
-                              <span className="font-black text-slate-700 italic text-sm">X</span>
-                              <input
-                                type="text"
-                                value={guess.score2}
-                                onChange={(e) => handleTodayScoreChange(match.id, 2, e.target.value)}
-                                disabled={isStarted}
-                                className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-700 text-center font-bold text-base focus:border-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                placeholder="0"
-                              />
-                            </div>
-
-                            {/* Team B */}
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
-                                <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
-                              </div>
-                              <span className="font-bold text-xs sm:text-sm uppercase truncate text-left">{match.team2}</span>
+                            {/* Save Button for this match */}
+                            <div className="flex items-center gap-3 w-full md:w-auto shrink-0 justify-end">
+                              <button
+                                onClick={() => handleSaveTodayGuess(match.id)}
+                                disabled={!guess.score1 || !guess.score2 || isSaving || isStarted}
+                                className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all w-full md:w-auto flex items-center justify-center gap-2 ${
+                                  isSaved
+                                    ? 'bg-emerald-500 text-slate-900 shadow-md shadow-emerald-500/10'
+                                    : 'bg-slate-900 hover:bg-emerald-500 hover:text-slate-900 border border-slate-800 hover:border-emerald-500 text-slate-400 disabled:opacity-30 disabled:hover:bg-slate-900 disabled:hover:text-slate-400 disabled:hover:border-slate-800'
+                                }`}
+                              >
+                                {isSaving ? <Loader2 size={12} className="animate-spin" /> : isSaved ? <CheckCircle2 size={12} /> : <Save size={12} />}
+                                {isSaved ? 'SALVO' : 'SALVAR'}
+                              </button>
                             </div>
                           </div>
 
-                          {/* Save Button for this match */}
-                          <div className="flex items-center gap-3 w-full md:w-auto shrink-0 justify-end">
-                            <button
-                              onClick={() => handleSaveTodayGuess(match.id)}
-                              disabled={!guess.score1 || !guess.score2 || isSaving || isStarted}
-                              className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all w-full md:w-auto flex items-center justify-center gap-2 ${
-                                isSaved
-                                  ? 'bg-emerald-500 text-slate-900 shadow-md shadow-emerald-500/10'
-                                  : 'bg-slate-900 hover:bg-emerald-500 hover:text-slate-900 border border-slate-800 hover:border-emerald-500 text-slate-400 disabled:opacity-30 disabled:hover:bg-slate-900 disabled:hover:text-slate-400 disabled:hover:border-slate-800'
-                              }`}
-                            >
-                              {isSaving ? <Loader2 size={12} className="animate-spin" /> : isSaved ? <CheckCircle2 size={12} /> : <Save size={12} />}
-                              {isSaved ? 'SALVO' : 'SALVAR'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {isEnded && (
-                          <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-left space-y-2 mt-2 w-full">
-                            <div className="flex items-center justify-between border-b border-emerald-500/10 pb-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                Resultado Oficial
-                              </span>
-                              {guess.points_earned !== undefined && (
-                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
-                                  +{guess.points_earned} pts
+                          {isEnded && (
+                            <div className="p-3 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 text-left space-y-2 mt-2 w-full">
+                              <div className="flex items-center justify-between border-b border-emerald-500/10 pb-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                  Resultado Oficial
                                 </span>
-                              )}
+                                {guess.points_earned !== undefined && (
+                                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
+                                    +{guess.points_earned} pts
+                                  </span>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                                <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                                  <p className="text-[8px] text-slate-500">Placar</p>
+                                  <p className="text-white font-black mt-0.5">{match.score1} x {match.score2}</p>
+                                </div>
+                                <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                                  <p className="text-[8px] text-slate-500">Mais Amarelos</p>
+                                  <p className="text-amber-400 font-black mt-0.5 truncate">{match.yellow_cards_winner || '-'}</p>
+                                </div>
+                                <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
+                                  <p className="text-[8px] text-slate-500">Vermelho?</p>
+                                  <p className="text-emerald-400 font-black mt-0.5">{match.has_red_card === true ? 'SIM' : match.has_red_card === false ? 'NÃO' : '-'}</p>
+                                </div>
+                              </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-300">
-                              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
-                                <p className="text-[8px] text-slate-500">Placar</p>
-                                <p className="text-white font-black mt-0.5">{match.score1} x {match.score2}</p>
-                              </div>
-                              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
-                                <p className="text-[8px] text-slate-500">Mais Amarelos</p>
-                                <p className="text-amber-400 font-black mt-0.5 truncate">{match.yellow_cards_winner || '-'}</p>
-                              </div>
-                              <div className="bg-slate-900/50 p-1.5 rounded-lg border border-slate-800/40">
-                                <p className="text-[8px] text-slate-500">Vermelho?</p>
-                                <p className="text-emerald-400 font-black mt-0.5">{match.has_red_card === true ? 'SIM' : match.has_red_card === false ? 'NÃO' : '-'}</p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                          )}
 
-                        {/* Extra predictions (Cards) */}
-                        <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2.5 mt-1">
-                          <div className="flex flex-col sm:flex-row gap-4 justify-between">
-                            {/* Yellow Cards Winner */}
-                            <div className="flex items-center justify-between gap-4 flex-1">
-                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Mais Amarelos (3 pts)</span>
-                              <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                                {[
-                                  { value: match.team1, label: match.team1.substring(0, 3).toUpperCase() },
-                                  { value: 'Empate', label: 'EMP' },
-                                  { value: match.team2, label: match.team2.substring(0, 3).toUpperCase() }
-                                ].map((opt, optIdx) => (
-                                  <button
-                                    key={`${opt.value}-${optIdx}`}
-                                    type="button"
-                                    disabled={isStarted}
-                                    onClick={() => handleTodayYellowCardsChange(match.id, opt.value)}
-                                    className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all ${
-                                      (guess.yellow_cards_winner && opt.value && normalizeTeamName(guess.yellow_cards_winner) === normalizeTeamName(opt.value))
-                                        ? 'bg-amber-500 text-slate-900 shadow'
-                                        : 'text-slate-500 hover:text-slate-300'
-                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                ))}
+                          {/* Extra predictions (Cards) */}
+                          <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-2.5 mt-1">
+                            <div className="flex flex-col sm:flex-row gap-4 justify-between">
+                              {/* Yellow Cards Winner */}
+                              <div className="flex items-center justify-between gap-4 flex-1">
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Mais Amarelos (3 pts)</span>
+                                <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                                  {[
+                                    { value: match.team1, label: match.team1.substring(0, 3).toUpperCase() },
+                                    { value: 'Empate', label: 'EMP' },
+                                    { value: match.team2, label: match.team2.substring(0, 3).toUpperCase() }
+                                  ].map((opt, optIdx) => (
+                                    <button
+                                      key={`${opt.value}-${optIdx}`}
+                                      type="button"
+                                      disabled={isStarted}
+                                      onClick={() => handleTodayYellowCardsChange(match.id, opt.value)}
+                                      className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all ${
+                                        (guess.yellow_cards_winner && opt.value && normalizeTeamName(guess.yellow_cards_winner) === normalizeTeamName(opt.value))
+                                          ? 'bg-amber-500 text-slate-900 shadow'
+                                          : 'text-slate-500 hover:text-slate-300'
+                                      } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
 
-                            {/* Red Card */}
-                            <div className="flex items-center justify-between gap-4 flex-1">
-                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Terá Vermelho? (4 pts)</span>
-                              <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                                {[
-                                  { value: true, label: 'SIM' },
-                                  { value: false, label: 'NÃO' }
-                                ].map(opt => (
-                                  <button
-                                    key={String(opt.value)}
-                                    type="button"
-                                    disabled={isStarted}
-                                    onClick={() => handleTodayRedCardChange(match.id, opt.value)}
-                                    className={`px-3 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all ${
-                                      guess.has_red_card === opt.value
-                                        ? 'bg-emerald-500 text-slate-900 shadow'
-                                        : 'text-slate-500 hover:text-slate-300'
-                                    } disabled:opacity-40 disabled:cursor-not-allowed`}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                ))}
+                              {/* Red Card */}
+                              <div className="flex items-center justify-between gap-4 flex-1">
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Terá Vermelho? (4 pts)</span>
+                                <div className="flex gap-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                                  {[
+                                    { value: true, label: 'SIM' },
+                                    { value: false, label: 'NÃO' }
+                                  ].map(opt => (
+                                    <button
+                                      key={String(opt.value)}
+                                      type="button"
+                                      disabled={isStarted}
+                                      onClick={() => handleTodayRedCardChange(match.id, opt.value)}
+                                      className={`px-3 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all ${
+                                        guess.has_red_card === opt.value
+                                          ? 'bg-emerald-500 text-slate-900 shadow'
+                                          : 'text-slate-500 hover:text-slate-300'
+                                      } disabled:opacity-40 disabled:cursor-not-allowed`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-2">
-                  <Calendar size={32} className="text-slate-600 mb-1" />
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nenhum jogo agendado para hoje</p>
-                  <Link href="/dashboard/matches" className="text-[10px] font-black text-emerald-400 hover:text-emerald-300 uppercase tracking-widest mt-1">
-                    Visualizar calendário completo
-                  </Link>
-                </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-2">
+                    <Calendar size={32} className="text-slate-600 mb-1" />
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nenhum jogo agendado para hoje</p>
+                    <Link href="/dashboard/matches" className="text-[10px] font-black text-emerald-400 hover:text-emerald-300 uppercase tracking-widest mt-1">
+                      Visualizar calendário completo
+                    </Link>
+                  </div>
+                )
               )}
             </motion.div>
 
@@ -969,25 +1034,34 @@ export default function Dashboard() {
                       Jogos pós-fase de grupos e pontos ganhos por participante do bolão
                     </p>
                   </div>
-                  {userGroups.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">Bolão:</span>
-                      <select
-                        value={selectedGroupId}
-                        onChange={(e) => setSelectedGroupId(e.target.value)}
-                        className="bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-lg px-3 py-1.5 focus:border-emerald-500 outline-none cursor-pointer"
-                      >
-                        {userGroups.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+                    {userGroups.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Bolão:</span>
+                        <select
+                          value={selectedGroupId}
+                          onChange={(e) => setSelectedGroupId(e.target.value)}
+                          className="bg-slate-900 border border-slate-800 text-xs font-bold text-white rounded-lg px-3 py-1.5 focus:border-emerald-500 outline-none cursor-pointer"
+                        >
+                          {userGroups.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <button 
+                      onClick={() => toggleCardCollapse('knockoutDetails')}
+                      className="text-[10px] font-black text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest ml-auto sm:ml-0"
+                    >
+                      {collapsedCards['knockoutDetails'] ? 'Expandir ▾' : 'Minimizar ▴'}
+                    </button>
+                  </div>
                 </div>
 
-                {userGroups.length === 0 ? (
+                {!collapsedCards['knockoutDetails'] && (
+                  userGroups.length === 0 ? (
                   <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-2">
                     <Users size={32} className="text-slate-600 mb-1" />
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Você não faz parte de nenhum bolão</p>
@@ -1179,7 +1253,7 @@ export default function Dashboard() {
                       </div>
                     );
                   })()
-                )}
+                ))}
               </div>
             )}
 
@@ -1195,126 +1269,262 @@ export default function Dashboard() {
                       Classificação prevista dos grupos e pontos conquistados
                     </p>
                   </div>
-                  <Link href="/dashboard/matches" className="text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-400 transition-colors">
-                    Ver e Ajustar Palpites →
-                  </Link>
+                  <div className="flex items-center gap-4">
+                    <Link href="/dashboard/matches" className="text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-400 transition-colors">
+                      Ver e Ajustar Palpites →
+                    </Link>
+                    <button 
+                      onClick={() => toggleCardCollapse('groupPredictions')}
+                      className="text-[10px] font-black text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest"
+                    >
+                      {collapsedCards['groupPredictions'] ? 'Expandir ▾' : 'Minimizar ▴'}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(groupLetter => {
-                    const pred = userGroupPredictions.find(p => p.group_letter === groupLetter);
-                    const result = groupResults.find(r => r.group_letter === groupLetter);
-                    
-                    const pts = calculateGroupPoints(pred, result);
-                    const isGroupCompleted = result && result.first_place && result.second_place;
+                {!collapsedCards['groupPredictions'] && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'].map(groupLetter => {
+                      const pred = userGroupPredictions.find(p => p.group_letter === groupLetter);
+                      const result = groupResults.find(r => r.group_letter === groupLetter);
+                      
+                      const pts = calculateGroupPoints(pred, result);
+                      const isGroupCompleted = result && result.first_place && result.second_place;
 
-                    return (
-                      <div key={groupLetter} className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-2xl flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-all">
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
-                          <span className="text-xs font-black text-white">GRUPO {groupLetter}</span>
-                          {isGroupCompleted ? (
-                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
-                              pts > 0 
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                                : 'bg-slate-950 text-slate-600 border border-slate-900'
-                            }`}>
-                              +{pts} pts
-                            </span>
-                          ) : (
-                            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">
-                              Pendente
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="space-y-2 text-[10px]">
-                          {/* 1º Lugar */}
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">1º Lugar</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`font-black uppercase tracking-tight ${pred?.first_place ? 'text-slate-200' : 'text-slate-600 italic'}`}>
-                                {pred?.first_place || 'Sem palpite'}
+                      return (
+                        <div key={groupLetter} className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-2xl flex flex-col justify-between gap-3 hover:border-emerald-500/30 transition-all">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
+                            <span className="text-xs font-black text-white">GRUPO {groupLetter}</span>
+                            {isGroupCompleted ? (
+                              <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
+                                pts > 0 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                  : 'bg-slate-950 text-slate-600 border border-slate-900'
+                              }`}>
+                                +{pts} pts
                               </span>
-                              {isGroupCompleted && pred?.first_place && (
-                                <span className={pred.first_place === result.first_place ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
-                                  {pred.first_place === result.first_place ? '✓' : '✗'}
-                                </span>
-                              )}
-                            </div>
+                            ) : (
+                              <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">
+                                Pendente
+                              </span>
+                            )}
                           </div>
 
-                          {/* 2º Lugar */}
-                          <div className="flex items-center justify-between">
-                            <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">2º Lugar</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`font-black uppercase tracking-tight ${pred?.second_place ? 'text-slate-200' : 'text-slate-600 italic'}`}>
-                                {pred?.second_place || 'Sem palpite'}
-                              </span>
-                              {isGroupCompleted && pred?.second_place && (
-                                <span className={pred.second_place === result.second_place ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
-                                  {pred.second_place === result.second_place ? '✓' : '✗'}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* 3º Lugar */}
-                          {pred?.third_place && (
+                          <div className="space-y-2 text-[10px]">
+                            {/* 1º Lugar */}
                             <div className="flex items-center justify-between">
-                              <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">3º Lugar</span>
+                              <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">1º Lugar</span>
                               <div className="flex items-center gap-1.5">
-                                <span className={`font-black uppercase tracking-tight ${pred.third_place_qualified ? 'text-amber-400' : 'text-slate-400'} line-clamp-1 max-w-[80px]`}>
-                                  {pred.third_place} {pred.third_place_qualified ? '⭐️' : ''}
+                                <span className={`font-black uppercase tracking-tight ${pred?.first_place ? 'text-slate-200' : 'text-slate-600 italic'}`}>
+                                  {pred?.first_place || 'Sem palpite'}
                                 </span>
-                                {isGroupCompleted && (
-                                  <span className={(pred.third_place_qualified && result.third_place_qualified && pred.third_place === result.third_place) ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
-                                    {(pred.third_place_qualified && result.third_place_qualified && pred.third_place === result.third_place) ? '✓' : '✗'}
+                                {isGroupCompleted && pred?.first_place && (
+                                  <span className={pred.first_place === result.first_place ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
+                                    {pred.first_place === result.first_place ? '✓' : '✗'}
                                   </span>
                                 )}
                               </div>
                             </div>
-                          )}
+
+                            {/* 2º Lugar */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">2º Lugar</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`font-black uppercase tracking-tight ${pred?.second_place ? 'text-slate-200' : 'text-slate-600 italic'}`}>
+                                  {pred?.second_place || 'Sem palpite'}
+                                </span>
+                                {isGroupCompleted && pred?.second_place && (
+                                  <span className={pred.second_place === result.second_place ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
+                                    {pred.second_place === result.second_place ? '✓' : '✗'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* 3º Lugar */}
+                            {pred?.third_place && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">3º Lugar</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`font-black uppercase tracking-tight ${pred.third_place_qualified ? 'text-amber-400' : 'text-slate-400'} line-clamp-1 max-w-[80px]`}>
+                                    {pred.third_place} {pred.third_place_qualified ? '⭐️' : ''}
+                                  </span>
+                                  {isGroupCompleted && (
+                                    <span className={(pred.third_place_qualified && result.third_place_qualified && pred.third_place === result.third_place) ? 'text-emerald-400 font-bold' : 'text-rose-500 font-bold'}>
+                                      {(pred.third_place_qualified && result.third_place_qualified && pred.third_place === result.third_place) ? '✓' : '✗'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Palpites do Torneio (Final e Extras) de Todos os Participantes */}
+            {user && (
+              <div className="glass p-6 md:p-8 rounded-[32px] border-slate-800/80 mt-8">
+                <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
+                      <Trophy size={16} /> Palpites Finais e Extras (Todos os Usuários)
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
+                      Veja as previsões do torneio e as escolhas extras feitas por todos os participantes
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="BUSCAR PARTICIPANTE..." 
+                        value={searchPreds}
+                        onChange={(e) => setSearchPreds(e.target.value)}
+                        className="pl-4 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-[10px] font-bold focus:border-emerald-500 outline-none transition-all uppercase tracking-widest text-white w-full sm:w-60" 
+                      />
+                    </div>
+                    <button 
+                      onClick={() => toggleCardCollapse('tournamentPredictions')}
+                      className="text-[10px] font-black text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest ml-auto sm:ml-0"
+                    >
+                      {collapsedCards['tournamentPredictions'] ? 'Expandir ▾' : 'Minimizar ▴'}
+                    </button>
+                  </div>
                 </div>
+
+                {!collapsedCards['tournamentPredictions'] && (
+                  <div className="overflow-x-auto w-full border border-slate-800/80 rounded-2xl bg-slate-950/10">
+                    <table className="w-full text-[10px] text-left border-collapse min-w-[900px]">
+                      <thead>
+                        <tr className="border-b border-slate-800/80 bg-slate-900/30 text-slate-400 font-bold uppercase tracking-wider">
+                          <th className="py-4 px-4 font-black">Participante</th>
+                          <th className="py-4 px-4 font-black text-amber-400">🥇 Campeão</th>
+                          <th className="py-4 px-4 font-black text-slate-300">🥈 2º Lugar</th>
+                          <th className="py-4 px-4 font-black text-amber-700">🥉 3º Lugar</th>
+                          <th className="py-4 px-4 font-black text-cyan-400">🌟 Craque</th>
+                          <th className="py-4 px-4 font-black text-emerald-400">⚽ Artilheiro</th>
+                          <th className="py-4 px-4 font-black text-pink-400">🔥 Atq.</th>
+                          <th className="py-4 px-4 font-black text-purple-400">🛡️ Def.</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/40">
+                        {filteredProfilesForPreds.map((p) => {
+                          const pred = allTournamentPredictions.find(tp => tp.profile_id === p.id);
+                          return (
+                            <tr key={p.id} className="hover:bg-slate-900/30 transition-colors">
+                              {/* User Info */}
+                              <td className="py-4 px-4 font-bold flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-black text-[10px] text-emerald-400 uppercase overflow-hidden shrink-0">
+                                  {p.avatar_url ? (
+                                    <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    p.full_name?.charAt(0) || '?'
+                                  )}
+                                </div>
+                                <span className="truncate max-w-[120px]" title={p.full_name}>
+                                  {p.full_name || p.username || 'Membro'}
+                                </span>
+                              </td>
+
+                              {/* Champion */}
+                              <td className="py-4 px-4 font-medium">
+                                {pred ? renderPredCell(pred.champion, tournamentResults?.champion, 15) : <span className="text-slate-700 italic">Pendente</span>}
+                              </td>
+
+                              {/* Runner-up */}
+                              <td className="py-4 px-4 font-medium">
+                                {pred ? renderPredCell(pred.second_place, tournamentResults?.second_place, 12) : <span className="text-slate-700 italic">Pendente</span>}
+                              </td>
+
+                              {/* 3rd place */}
+                              <td className="py-4 px-4 font-medium">
+                                {pred ? renderPredCell(pred.third_place, tournamentResults?.third_place, 10) : <span className="text-slate-700 italic">Pendente</span>}
+                              </td>
+
+                              {/* Craque */}
+                              <td className="py-4 px-4 font-medium">
+                                {pred ? renderPredCell(pred.craque, tournamentResults?.craque, 10) : <span className="text-slate-700 italic">Pendente</span>}
+                              </td>
+
+                              {/* Artilheiro */}
+                              <td className="py-4 px-4 font-medium">
+                                {pred ? renderPredCell(pred.artilheiro, tournamentResults?.artilheiro, 8) : <span className="text-slate-700 italic">Pendente</span>}
+                              </td>
+
+                              {/* Best Attack */}
+                              <td className="py-4 px-4 font-medium">
+                                {pred ? renderPredCell(pred.best_attack, tournamentResults?.best_attack, 6) : <span className="text-slate-700 italic">Pendente</span>}
+                              </td>
+
+                              {/* Best Defense */}
+                              <td className="py-4 px-4 font-medium">
+                                {pred ? renderPredCell(pred.best_defense, tournamentResults?.best_defense, 6) : <span className="text-slate-700 italic">Pendente</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {filteredProfilesForPreds.length === 0 && (
+                          <tr>
+                            <td colSpan={8} className="py-8 text-center text-slate-600 font-bold uppercase tracking-widest">
+                              Nenhum participante encontrado
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
             {user && (
               <div className="space-y-6">
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Minhas Conquistas</h4>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Medalhas virtuais desbloqueadas de acordo com seu desempenho</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Minhas Conquistas</h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Medalhas virtuais desbloqueadas de acordo com seu desempenho</p>
+                  </div>
+                  <button 
+                    onClick={() => toggleCardCollapse('achievements')}
+                    className="text-[10px] font-black text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest"
+                  >
+                    {collapsedCards['achievements'] ? 'Expandir ▾' : 'Minimizar ▴'}
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {BADGES_DEFINITION.map(badge => {
-                    const earnedList = calculateUserBadges(userGuesses, rankingPosition, userGroupPredictions, groupResults);
-                    const isEarned = earnedList.includes(badge.id);
-                    return (
-                      <div 
-                        key={badge.id}
-                        className={`glass p-5 rounded-2xl flex flex-col items-center text-center justify-between border transition-all duration-300 relative overflow-hidden ${
-                          isEarned 
-                            ? `${badge.color} shadow-lg ${badge.glowColor} scale-100` 
-                            : 'border-slate-800/80 text-slate-600 opacity-40 grayscale scale-95'
-                        }`}
-                        title={badge.description}
-                      >
-                        <div className="text-3xl mb-3">{badge.icon}</div>
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-100">{badge.name}</p>
-                          <p className="text-[8px] font-bold text-slate-500 mt-1 line-clamp-2 leading-relaxed">{badge.description}</p>
+                {!collapsedCards['achievements'] && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {BADGES_DEFINITION.map(badge => {
+                      const earnedList = calculateUserBadges(userGuesses, rankingPosition, userGroupPredictions, groupResults);
+                      const isEarned = earnedList.includes(badge.id);
+                      return (
+                        <div 
+                          key={badge.id}
+                          className={`glass p-5 rounded-2xl flex flex-col items-center text-center justify-between border transition-all duration-300 relative overflow-hidden ${
+                            isEarned 
+                              ? `${badge.color} shadow-lg ${badge.glowColor} scale-100` 
+                              : 'border-slate-800/80 text-slate-600 opacity-40 grayscale scale-95'
+                          }`}
+                          title={badge.description}
+                        >
+                          <div className="text-3xl mb-3">{badge.icon}</div>
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-100">{badge.name}</p>
+                            <p className="text-[8px] font-bold text-slate-500 mt-1 line-clamp-2 leading-relaxed">{badge.description}</p>
+                          </div>
+                          {!isEarned && (
+                            <div className="absolute top-2 right-2 text-[9px] font-black tracking-widest text-slate-600">🔒</div>
+                          )}
                         </div>
-                        {!isEarned && (
-                          <div className="absolute top-2 right-2 text-[9px] font-black tracking-widest text-slate-600">🔒</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
