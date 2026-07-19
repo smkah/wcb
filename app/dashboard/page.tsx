@@ -144,10 +144,21 @@ export default function Dashboard() {
     });
   }, [allProfiles, searchPreds]);
 
-  const renderPredCell = (predVal: string | undefined | null, resultVal: string | undefined | null, points: number) => {
+  const renderPredCell = (predVal: string | undefined | null, resultVal: string | undefined | null, points: number, isSubstringMatch = false) => {
     if (!predVal) return <span className="text-slate-600 italic">Pendente</span>;
     if (!resultVal) return <span className="text-slate-300 font-bold uppercase">{predVal}</span>;
-    const isMatch = predVal.trim().toLowerCase() === resultVal.trim().toLowerCase();
+    
+    let isMatch = false;
+    if (isSubstringMatch) {
+      const normalize = (str: string) => 
+        str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const normPred = normalize(predVal);
+      const normResult = normalize(resultVal);
+      isMatch = normPred !== '' && normResult !== '' && (normPred.includes(normResult) || normResult.includes(normPred));
+    } else {
+      isMatch = predVal.trim().toLowerCase() === resultVal.trim().toLowerCase();
+    }
+
     return (
       <div className="flex flex-col">
         <span className={`font-black uppercase tracking-tight ${isMatch ? 'text-emerald-400' : 'text-rose-500/80'}`}>
@@ -1269,12 +1280,12 @@ export default function Dashboard() {
 
                               {/* Craque */}
                               <td className="py-4 px-4 font-medium">
-                                {pred ? renderPredCell(pred.craque, tournamentResults?.craque, 10) : <span className="text-slate-700 italic">Pendente</span>}
+                                {pred ? renderPredCell(pred.craque, tournamentResults?.craque, 10, true) : <span className="text-slate-700 italic">Pendente</span>}
                               </td>
 
                               {/* Artilheiro */}
                               <td className="py-4 px-4 font-medium">
-                                {pred ? renderPredCell(pred.artilheiro, tournamentResults?.artilheiro, 8) : <span className="text-slate-700 italic">Pendente</span>}
+                                {pred ? renderPredCell(pred.artilheiro, tournamentResults?.artilheiro, 8, true) : <span className="text-slate-700 italic">Pendente</span>}
                               </td>
 
                               {/* Best Attack */}

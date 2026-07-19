@@ -60,6 +60,17 @@ ON public.tournament_results FOR ALL
 USING (is_admin());
 
 
+-- Helper function to remove accents from text
+CREATE OR REPLACE FUNCTION public.remove_accents(input_string text)
+RETURNS text AS $$
+BEGIN
+    RETURN translate(input_string, 
+        'áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ', 
+        'aaaaaeeeeiiiiooooouuuucnAAAAAEEEEIIIIOOOOOUUUUCN');
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
 -- 2. Atualizar função de recálculo de pontos do usuário para somar palpites finais
 CREATE OR REPLACE FUNCTION public.recalculate_user_points(p_id UUID) 
 RETURNS VOID AS $$
@@ -110,8 +121,14 @@ BEGIN
                 (CASE WHEN LOWER(TRIM(tp.champion)) = LOWER(TRIM(tr.champion)) THEN 15 ELSE 0 END) +
                 (CASE WHEN LOWER(TRIM(tp.second_place)) = LOWER(TRIM(tr.second_place)) THEN 12 ELSE 0 END) +
                 (CASE WHEN LOWER(TRIM(tp.third_place)) = LOWER(TRIM(tr.third_place)) THEN 10 ELSE 0 END) +
-                (CASE WHEN LOWER(TRIM(tp.craque)) = LOWER(TRIM(tr.craque)) THEN 10 ELSE 0 END) +
-                (CASE WHEN LOWER(TRIM(tp.artilheiro)) = LOWER(TRIM(tr.artilheiro)) THEN 8 ELSE 0 END) +
+                (CASE WHEN LOWER(TRIM(tp.craque)) != '' AND LOWER(TRIM(tr.craque)) != '' AND (
+                    POSITION(public.remove_accents(LOWER(TRIM(tp.craque))) IN public.remove_accents(LOWER(TRIM(tr.craque)))) > 0 OR
+                    POSITION(public.remove_accents(LOWER(TRIM(tr.craque))) IN public.remove_accents(LOWER(TRIM(tp.craque)))) > 0
+                ) THEN 10 ELSE 0 END) +
+                (CASE WHEN LOWER(TRIM(tp.artilheiro)) != '' AND LOWER(TRIM(tr.artilheiro)) != '' AND (
+                    POSITION(public.remove_accents(LOWER(TRIM(tp.artilheiro))) IN public.remove_accents(LOWER(TRIM(tr.artilheiro)))) > 0 OR
+                    POSITION(public.remove_accents(LOWER(TRIM(tr.artilheiro))) IN public.remove_accents(LOWER(TRIM(tp.artilheiro)))) > 0
+                ) THEN 8 ELSE 0 END) +
                 (CASE WHEN LOWER(TRIM(tp.best_attack)) = LOWER(TRIM(tr.best_attack)) THEN 6 ELSE 0 END) +
                 (CASE WHEN LOWER(TRIM(tp.best_defense)) = LOWER(TRIM(tr.best_defense)) THEN 6 ELSE 0 END)
             FROM public.tournament_predictions tp
