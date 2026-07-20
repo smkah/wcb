@@ -2,25 +2,45 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { RefreshCw, TrendingUp } from 'lucide-react';
+import { RefreshCw, TrendingUp, Users } from 'lucide-react';
 
 interface EvolutionChartProps {
   profileId: string;
 }
 
-interface PointData {
-  index: number;
-  label: string;
-  match: string;
+interface MatchHistoryPoint {
+  matchId: string;
+  matchLabel: string;
+  matchDesc: string;
   pointsEarned: number;
   cumulative: number;
-  avgCumulative: number;
 }
 
+interface ParticipantData {
+  profileId: string;
+  name: string;
+  color: string;
+  pointsHistory: MatchHistoryPoint[];
+}
+
+const PALETTE = [
+  '#10B981', // Emerald (User)
+  '#06B6D4', // Cyan
+  '#A855F7', // Purple
+  '#F59E0B', // Amber
+  '#EC4899', // Pink
+  '#3B82F6', // Blue
+  '#EF4444', // Red
+  '#14B8A6', // Teal
+  '#6366F1', // Indigo
+  '#84CC16', // Lime
+];
+
 export default function EvolutionChart({ profileId }: EvolutionChartProps) {
-  const [data, setData] = useState<PointData[]>([]);
+  const [participants, setParticipants] = useState<ParticipantData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activePoint, setActivePoint] = useState<PointData | null>(null);
+  const [hoveredProfileId, setHoveredProfileId] = useState<string | null>(null);
+  const [activeMatchIndex, setActiveMatchIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -28,15 +48,22 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
     const fetchHistory = async () => {
       setLoading(true);
       try {
-        // 1. Buscar palpites do usuário
-        const { data: guessesData, error: guessesError } = await supabase
+        // 1. Buscar todos os perfis
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name, username')
+          .order('points', { ascending: false });
+
+        if (profilesError) throw profilesError;
+
+        // 2. Buscar todos os palpites
+        const { data: allGuessesData, error: guessesError } = await supabase
           .from('guesses')
-          .select('points_earned, match_id')
-          .eq('profile_id', profileId);
+          .select('profile_id, points_earned, match_id');
 
         if (guessesError) throw guessesError;
 
-        // 2. Buscar todas as partidas finalizadas
+        // 3. Buscar todas as partidas finalizadas
         const { data: matchesData, error: matchesError } = await supabase
           .from('matches')
           .select('id, team1, team2, score1, score2, date, time')
@@ -45,36 +72,16 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
 
         if (matchesError) throw matchesError;
 
-        // 3. Buscar TODOS os palpites para calcular a média do grupo
-        const { data: allGuessesData } = await supabase
-          .from('guesses')
-          .select('points_earned, match_id');
-
-        const avgMap = new Map<string, number>();
-        if (allGuessesData) {
-          const matchPointsSum = new Map<string, number>();
-          const matchPointsCount = new Map<string, number>();
-
-          allGuessesData.forEach(g => {
-            const currentSum = matchPointsSum.get(g.match_id) || 0;
-            const currentCount = matchPointsCount.get(g.match_id) || 0;
-            matchPointsSum.set(g.match_id, currentSum + (g.points_earned || 0));
-            matchPointsCount.set(g.match_id, currentCount + 1);
-          });
-
-          matchPointsSum.forEach((sum, matchId) => {
-            const count = matchPointsCount.get(matchId) || 1;
-            avgMap.set(matchId, Math.round((sum / count) * 10) / 10);
-          });
-        }
-
-        // 4. Mapear palpites do usuário por match_id
-        const guessesMap = new Map<string, number>();
-        (guessesData || []).forEach(g => {
-          guessesMap.set(g.match_id, g.points_earned || 0);
+        // 4. Mapear palpites por profile_id e match_id
+        const guessesMap = new Map<string, Map<string, number>>();
+        (allGuessesData || []).forEach(g => {
+          if (!guessesMap.has(g.profile_id)) {
+            guessesMap.set(g.profile_id, new Map());
+          }
+          guessesMap.get(g.profile_id)!.set(g.match_id, g.points_earned || 0);
         });
 
-        // 5. Filtrar e ordenar partidas cronologicamente
+        // 5. Ordenar partidas cronologicamente
         const finishedMatches = (matchesData || [])
           .sort((a, b) => {
             const dateTimeA = new Date(`${a.date}T${a.time || '00:00'}`);
@@ -82,25 +89,38 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
             return dateTimeA.getTime() - dateTimeB.getTime();
           });
 
-        // 6. Construir os pontos acumulados do usuário e do grupo
-        let runningTotal = 0;
-        let avgRunningTotal = 0;
-        const pointsList: PointData[] = finishedMatches.map((m, idx) => {
-          const earned = guessesMap.get(m.id) || 0;
-          const avgEarned = avgMap.get(m.id) || 0;
-          runningTotal += earned;
-          avgRunningTotal += avgEarned;
+        // 6. Construir o histórico de pontos de cada participante
+        let colorIdx = 1; // Começa em 1 para deixar a paleta 0 (Emerald) reservada para o usuário logado se possível
+        const ptsList: ParticipantData[] = (profilesData || []).map((p) => {
+          let runningTotal = 0;
+          const userGuesses = guessesMap.get(p.id) || new Map<string, number>();
+
+          const pointsHistory = finishedMatches.map((m, idx) => {
+            const earned = userGuesses.get(m.id) || 0;
+            runningTotal += earned;
+            return {
+              matchId: m.id,
+              matchLabel: `Jogo ${idx + 1}`,
+              matchDesc: `${m.team1} ${m.score1} x ${m.score2} ${m.team2}`,
+              pointsEarned: earned,
+              cumulative: runningTotal
+            };
+          });
+
+          const isCurrentUser = p.id === profileId;
+          const color = isCurrentUser 
+            ? PALETTE[0] 
+            : PALETTE[colorIdx++ % PALETTE.length];
+
           return {
-            index: idx,
-            label: `Jogo ${idx + 1}`,
-            match: `${m.team1} ${m.score1} x ${m.score2} ${m.team2}`,
-            pointsEarned: earned,
-            cumulative: runningTotal,
-            avgCumulative: Math.round(avgRunningTotal * 10) / 10
+            profileId: p.id,
+            name: p.full_name || p.username || 'Participante',
+            color,
+            pointsHistory
           };
         });
 
-        setData(pointsList);
+        setParticipants(ptsList);
       } catch (err) {
         console.error('Error calculating evolution data:', err);
       } finally {
@@ -122,7 +142,9 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
     );
   }
 
-  if (data.length === 0) {
+  // Se não houver dados
+  const hasHistory = participants.length > 0 && participants[0].pointsHistory.length > 0;
+  if (!hasHistory) {
     return (
       <div className="h-64 flex flex-col items-center justify-center bg-slate-900/20 rounded-3xl border border-slate-800/50 backdrop-blur-md p-6 text-center">
         <TrendingUp className="text-slate-600 mb-3" size={32} />
@@ -132,9 +154,11 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
     );
   }
 
+  const finishedMatchesCount = participants[0].pointsHistory.length;
+
   // Configurações do SVG
   const width = 600;
-  const height = 220;
+  const height = 240;
   const paddingLeft = 40;
   const paddingRight = 20;
   const paddingTop = 30;
@@ -143,96 +167,93 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
 
-  const maxUserPoints = Math.max(...data.map(d => d.cumulative), 5);
-  const maxAvgPoints = Math.max(...data.map(d => d.avgCumulative), 5);
-  const maxPoints = Math.max(maxUserPoints, maxAvgPoints);
-  const totalPointsCount = data.length;
+  // Achar o maior valor acumulado entre todos os participantes para definir o eixo Y
+  let maxPoints = 5;
+  participants.forEach(p => {
+    p.pointsHistory.forEach(pt => {
+      if (pt.cumulative > maxPoints) {
+        maxPoints = pt.cumulative;
+      }
+    });
+  });
 
   // Converter pontos em coordenadas SVG
   const getX = (idx: number) => {
-    if (totalPointsCount <= 1) return paddingLeft + chartWidth / 2;
-    return paddingLeft + (idx / (totalPointsCount - 1)) * chartWidth;
+    if (finishedMatchesCount <= 1) return paddingLeft + chartWidth / 2;
+    return paddingLeft + (idx / (finishedMatchesCount - 1)) * chartWidth;
   };
 
   const getY = (val: number) => {
     return paddingTop + chartHeight - (val / maxPoints) * chartHeight;
   };
 
-  // Construir as linhas do gráfico
-  let linePath = '';
-  let areaPath = '';
-  let avgLinePath = '';
-
-  data.forEach((pt, idx) => {
-    const x = getX(idx);
-    const y = getY(pt.cumulative);
-    const yAvg = getY(pt.avgCumulative);
-
-    if (idx === 0) {
-      linePath = `M ${x} ${y}`;
-      areaPath = `M ${x} ${paddingTop + chartHeight} L ${x} ${y}`;
-      avgLinePath = `M ${x} ${yAvg}`;
-    } else {
-      linePath += ` L ${x} ${y}`;
-      areaPath += ` L ${x} ${y}`;
-      avgLinePath += ` L ${x} ${yAvg}`;
-    }
-
-    if (idx === data.length - 1) {
-      areaPath += ` L ${x} ${paddingTop + chartHeight} Z`;
-    }
-  });
-
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!containerRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     
-    // Encontrar o ponto mais próximo da coordenada X do mouse
-    let closestPt = data[0];
-    let minDiff = Math.abs(getX(0) * (rect.width / width) - mouseX);
+    // Achar o índice do jogo mais próximo baseado na posição X do mouse
+    let closestIndex = 0;
+    let minDiff = Infinity;
 
-    data.forEach((pt, idx) => {
-      const px = getX(idx) * (rect.width / width);
+    for (let i = 0; i < finishedMatchesCount; i++) {
+      const px = getX(i) * (rect.width / width);
       const diff = Math.abs(px - mouseX);
       if (diff < minDiff) {
         minDiff = diff;
-        closestPt = pt;
+        closestIndex = i;
       }
-    });
-
-    if (closestPt) {
-      setActivePoint(closestPt);
-      const x = getX(closestPt.index);
-      
-      // Ajustar o tooltip em relação ao container pai
-      setTooltipPos({
-        x: (x / width) * rect.width,
-        y: (getY(closestPt.cumulative) / height) * rect.height - 95
-      });
     }
+
+    setActiveMatchIndex(closestIndex);
+    const x = getX(closestIndex);
+
+    // Pegar o participante ativo ou o usuário logado para posicionar a altura do tooltip
+    const activeParticipant = participants.find(p => p.profileId === (hoveredProfileId || profileId)) || participants[0];
+    const activePt = activeParticipant.pointsHistory[closestIndex];
+
+    setTooltipPos({
+      x: (x / width) * rect.width,
+      y: (getY(activePt.cumulative) / height) * rect.height - 110
+    });
   };
 
   const handleMouseLeave = () => {
-    setActivePoint(null);
+    setActiveMatchIndex(null);
   };
+
+  // Obter detalhes do ponto ativo para exibir no tooltip
+  const getTooltipData = () => {
+    if (activeMatchIndex === null) return null;
+    const matchInfo = participants[0].pointsHistory[activeMatchIndex];
+    
+    // Ordenar participantes por pontuação acumulada neste jogo específico
+    const standingsAtMatch = participants
+      .map(p => ({
+        name: p.name,
+        color: p.color,
+        isUser: p.profileId === profileId,
+        isHovered: p.profileId === hoveredProfileId,
+        pointsEarned: p.pointsHistory[activeMatchIndex].pointsEarned,
+        cumulative: p.pointsHistory[activeMatchIndex].cumulative
+      }))
+      .sort((a, b) => b.cumulative - a.cumulative);
+
+    return {
+      label: matchInfo.matchLabel,
+      matchDesc: matchInfo.matchDesc,
+      standings: standingsAtMatch
+    };
+  };
+
+  const tooltipData = getTooltipData();
 
   return (
     <div ref={containerRef} className="relative w-full bg-slate-950/40 p-6 rounded-3xl border border-slate-800/80 backdrop-blur-md">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Evolução do Desempenho</h4>
-          <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Histórico de pontos acumulados comparado à média</p>
-        </div>
-        <div className="flex items-center gap-4 text-[9px] uppercase font-black tracking-widest bg-slate-900/50 p-2 border border-slate-800/60 rounded-2xl">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-emerald-400 rounded-full" />
-            <span className="text-slate-300">Você</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 border-t-2 border-dashed border-purple-500" />
-            <span className="text-slate-400">Média do Grupo</span>
-          </div>
+          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400">Evolução do Campeonato</h4>
+          <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Evolução dos pontos acumulados de todos os participantes</p>
         </div>
       </div>
 
@@ -244,16 +265,8 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
           onMouseLeave={handleMouseLeave}
         >
           <defs>
-            <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
-            </linearGradient>
-            <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#06B6D4" />
-              <stop offset="100%" stopColor="#10B981" />
-            </linearGradient>
             <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feGaussianBlur stdDeviation="3" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
           </defs>
@@ -263,7 +276,7 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
             const y = paddingTop + chartHeight * ratio;
             const value = Math.round(maxPoints * (1 - ratio));
             return (
-              <g key={i} className="opacity-20">
+              <g key={i} className="opacity-15">
                 <line 
                   x1={paddingLeft} 
                   y1={y} 
@@ -286,82 +299,170 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
             );
           })}
 
-          {/* Área com gradiente (Usuário) */}
-          {data.length > 1 && (
-            <path d={areaPath} fill="url(#areaGrad)" />
-          )}
-
-          {/* Linha da Média Geral (Dashed Purple) */}
-          {data.length > 1 && (
-            <path 
-              d={avgLinePath} 
-              fill="none" 
-              stroke="#A855F7" 
-              strokeWidth="2" 
-              strokeDasharray="3 3"
-              strokeLinecap="round"
+          {/* Linha vertical de guia quando passa o mouse */}
+          {activeMatchIndex !== null && (
+            <line
+              x1={getX(activeMatchIndex)}
+              y1={paddingTop}
+              x2={getX(activeMatchIndex)}
+              y2={paddingTop + chartHeight}
+              stroke="#10B981"
+              strokeOpacity="0.3"
+              strokeWidth="1.5"
+              strokeDasharray="2 2"
             />
           )}
 
-          {/* Linha principal (Usuário) */}
-          {data.length > 1 && (
-            <path 
-              d={linePath} 
-              fill="none" 
-              stroke="url(#lineGrad)" 
-              strokeWidth="3" 
-              strokeLinecap="round"
-              filter="url(#glow)"
-            />
-          )}
+          {/* Linhas de cada participante */}
+          {participants.map((p) => {
+            const isUser = p.profileId === profileId;
+            const isHovered = p.profileId === hoveredProfileId;
+            const hasActiveHover = hoveredProfileId !== null;
+            
+            // Definir opacidade dinâmica baseada no foco
+            let opacity = 0.35;
+            if (isUser) opacity = 0.85;
+            if (hasActiveHover) {
+              opacity = isHovered ? 1.0 : 0.1;
+            }
 
-          {/* Marcadores circulares */}
-          {data.map((pt, idx) => {
-            const x = getX(idx);
-            const y = getY(pt.cumulative);
-            const isActive = activePoint?.index === idx;
+            let path = '';
+            p.pointsHistory.forEach((pt, idx) => {
+              const x = getX(idx);
+              const y = getY(pt.cumulative);
+              if (idx === 0) {
+                path = `M ${x} ${y}`;
+              } else {
+                path += ` L ${x} ${y}`;
+              }
+            });
 
             return (
-              <circle
-                key={idx}
-                cx={x}
-                cy={y}
-                r={isActive ? 6 : 3}
-                fill={isActive ? '#10B981' : '#06B6D4'}
-                stroke="#0F172A"
-                strokeWidth={isActive ? 2 : 1}
+              <path
+                key={p.profileId}
+                d={path}
+                fill="none"
+                stroke={p.color}
+                strokeWidth={isUser || isHovered ? 3.5 : 1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={opacity}
                 className="transition-all duration-200"
+                filter={isUser || isHovered ? 'url(#glow)' : undefined}
               />
             );
           })}
+
+          {/* Marcadores circulares para a linha sob hover ou principal */}
+          {participants.map((p) => {
+            const isUser = p.profileId === profileId;
+            const isHovered = p.profileId === hoveredProfileId;
+            
+            // Apenas renderizar círculos para o usuário logado ou para a linha focada
+            if (!isUser && !isHovered) return null;
+
+            return p.pointsHistory.map((pt, idx) => {
+              const x = getX(idx);
+              const y = getY(pt.cumulative);
+              const isMatchIndexActive = activeMatchIndex === idx;
+
+              return (
+                <circle
+                  key={`${p.profileId}-${idx}`}
+                  cx={x}
+                  cy={y}
+                  r={isMatchIndexActive ? 5 : 2.5}
+                  fill={p.color}
+                  stroke="#050B1A"
+                  strokeWidth={isMatchIndexActive ? 1.5 : 1}
+                  className="transition-all duration-150"
+                  opacity={hoveredProfileId && !isHovered ? 0.1 : 1}
+                />
+              );
+            });
+          })}
         </svg>
 
-        {/* Tooltip HTML Dinâmico em Overlay */}
-        {activePoint && (
+        {/* Tooltip Dinâmico */}
+        {activeMatchIndex !== null && tooltipData && (
           <div 
-            className="absolute pointer-events-none z-50 bg-slate-900/95 border border-emerald-500/30 p-3 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col gap-1 text-left min-w-[170px] transition-all duration-150 ease-out"
+            className="absolute pointer-events-none z-50 bg-slate-900/95 border border-slate-800/80 p-3.5 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col gap-2 text-left min-w-[200px] transition-all duration-150 ease-out"
             style={{ 
               left: `${tooltipPos.x}px`, 
               top: `${tooltipPos.y}px`,
               transform: 'translateX(-50%)'
             }}
           >
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">
-              {activePoint.label}
-            </span>
-            <span className="text-xs font-bold text-white truncate max-w-[180px]">
-              {activePoint.match}
-            </span>
-            <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-800">
-              <span className="text-[9px] font-bold text-emerald-400">Você: +{activePoint.pointsEarned} pts</span>
-              <span className="text-[10px] font-black text-white">{activePoint.cumulative} pts</span>
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">
+                {tooltipData.label}
+              </span>
+              <span className="text-[10px] font-black text-white truncate max-w-[200px] mt-0.5">
+                {tooltipData.matchDesc}
+              </span>
             </div>
-            <div className="flex items-center justify-between text-[9px] font-bold text-purple-400">
-              <span>Média Geral:</span>
-              <span className="font-black text-white">{activePoint.avgCumulative} pts</span>
+            
+            <div className="flex flex-col gap-1 border-t border-slate-800/80 pt-2 max-h-[140px] overflow-y-auto">
+              {tooltipData.standings.slice(0, 5).map((player, idx) => (
+                <div 
+                  key={player.name} 
+                  className={`flex items-center justify-between text-[9px] gap-4 ${
+                    player.isUser ? 'font-black text-emerald-400' : 'text-slate-400'
+                  }`}
+                  style={{ opacity: hoveredProfileId && !player.isHovered ? 0.4 : 1 }}
+                >
+                  <div className="flex items-center gap-1.5 truncate max-w-[120px]">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: player.color }} />
+                    <span className="truncate">{player.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[8px] text-slate-500">({player.pointsEarned >= 0 ? `+${player.pointsEarned}` : player.pointsEarned})</span>
+                    <span className="font-mono font-bold text-white">{player.cumulative} pts</span>
+                  </div>
+                </div>
+              ))}
+              {tooltipData.standings.length > 5 && (
+                <div className="text-[8px] text-slate-500 text-center font-bold uppercase mt-0.5">
+                  + {tooltipData.standings.length - 5} participantes
+                </div>
+              )}
             </div>
           </div>
         )}
+      </div>
+
+      {/* Legenda interativa de participantes */}
+      <div className="mt-6 border-t border-slate-800/60 pt-4">
+        <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 block mb-2.5">
+          Participantes (Passe o mouse para destacar)
+        </span>
+        <div className="flex flex-wrap gap-2.5">
+          {participants.map((p) => {
+            const isUser = p.profileId === profileId;
+            const isHovered = p.profileId === hoveredProfileId;
+            const hasActiveHover = hoveredProfileId !== null;
+
+            return (
+              <button
+                key={p.profileId}
+                onMouseEnter={() => setHoveredProfileId(p.profileId)}
+                onMouseLeave={() => setHoveredProfileId(null)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all ${
+                  isHovered 
+                    ? 'bg-slate-800/80 border-slate-700 text-white' 
+                    : isUser
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : hasActiveHover
+                        ? 'bg-slate-900/10 border-slate-950 text-slate-600 opacity-40'
+                        : 'bg-slate-900/40 border-slate-800/60 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                <span>{p.name} {isUser && '(Você)'}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
