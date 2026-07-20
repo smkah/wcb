@@ -377,7 +377,7 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
         {/* Tooltip Dinâmico */}
         {activeMatchIndex !== null && tooltipData && (
           <div 
-            className="absolute pointer-events-none z-50 bg-slate-900/95 border border-slate-800/80 p-3.5 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col gap-2 text-left min-w-[200px] transition-all duration-150 ease-out"
+            className="absolute pointer-events-none z-50 bg-slate-900/95 border border-slate-800/80 p-3.5 rounded-2xl shadow-2xl backdrop-blur-md flex flex-col gap-2 text-left min-w-50 transition-all duration-150 ease-out"
             style={{ 
               left: `${tooltipPos.x}px`, 
               top: `${tooltipPos.y}px`,
@@ -388,12 +388,12 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
               <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">
                 {tooltipData.label}
               </span>
-              <span className="text-[10px] font-black text-white truncate max-w-[200px] mt-0.5">
+              <span className="text-[10px] font-black text-white truncate max-w-50 mt-0.5">
                 {tooltipData.matchDesc}
               </span>
             </div>
             
-            <div className="flex flex-col gap-1 border-t border-slate-800/80 pt-2 max-h-[140px] overflow-y-auto">
+            <div className="flex flex-col gap-1 border-t border-slate-800/80 pt-2 max-h-35 overflow-y-auto">
               {tooltipData.standings.slice(0, 5).map((player, idx) => (
                 <div 
                   key={player.name} 
@@ -402,7 +402,7 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
                   }`}
                   style={{ opacity: hoveredProfileId && !player.isHovered ? 0.4 : 1 }}
                 >
-                  <div className="flex items-center gap-1.5 truncate max-w-[120px]">
+                  <div className="flex items-center gap-1.5 truncate max-w-30">
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: player.color }} />
                     <span className="truncate">{player.name}</span>
                   </div>
