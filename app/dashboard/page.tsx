@@ -181,11 +181,13 @@ export default function Dashboard() {
       setLoading(true);
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser) {
+          router.push('/login');
+          return;
+        }
+        setUser(currentUser);
         let loadedGuesses: any[] = [];
         let loadedMatches: any[] = [];
-
-        if (currentUser) {
-          setUser(currentUser);
 
           // Buscar todos os dados do banco de dados em paralelo para evitar gargalos/waterfall
           const [
@@ -282,12 +284,8 @@ export default function Dashboard() {
             { label: 'Pontos de Classificação', value: `${classificationPoints} pts`, icon: Target, color: 'text-pink-400', bg: 'bg-pink-400/10' },
             { label: 'Posição no Ranking', value: `${computedRank}º`, icon: Trophy, color: 'text-cyan-400', bg: 'bg-cyan-400/10' },
           ]);
-        } else {
-          router.push('/login');
-          return;
-        }
 
-        const rawMatches = (matchesRes.data && matchesRes.data.length > 0) ? matchesRes.data : WORLD_CUP_DATA.matches;
+        const rawMatches = (matches && matches.length > 0) ? matches : WORLD_CUP_DATA.matches;
         loadedMatches = mapMatchesToBrazil(rawMatches);
         setAllMatches(loadedMatches);
 
