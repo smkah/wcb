@@ -649,7 +649,7 @@ export default function Dashboard() {
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-[32px] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-amber-500/5 relative overflow-hidden"
+            className="mb-8 p-6 bg-amber-500/10 border border-amber-500/30 rounded-4xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-amber-500/5 relative overflow-hidden"
           >
             <div className="flex items-center gap-4 text-amber-500">
               <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center shrink-0">
@@ -702,7 +702,7 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="glass p-8 rounded-[32px] flex items-center justify-between group hover:border-emerald-500/30 transition-all"
+              className="glass p-8 rounded-4xl flex items-center justify-between group hover:border-emerald-500/30 transition-all"
             >
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">{stat.label}</p>
@@ -722,7 +722,7 @@ export default function Dashboard() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`glass p-6 md:p-8 rounded-[32px] border-emerald-500/20 shadow-lg shadow-emerald-950/10 flex flex-col ${collapsedCards['todayMatches'] ? '' : 'gap-6'}`}
+              className={`glass p-6 md:p-8 rounded-4xl border-emerald-500/20 shadow-lg shadow-emerald-950/10 flex flex-col ${collapsedCards['todayMatches'] ? '' : 'gap-6'}`}
             >
               <div className={`flex items-center justify-between ${collapsedCards['todayMatches'] ? '' : 'border-b border-slate-800 pb-4'}`}>
                 <div className="flex items-center gap-2">
@@ -771,13 +771,13 @@ export default function Dashboard() {
                               {/* Team A */}
                               <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
                                 <span className="font-bold text-xs sm:text-sm uppercase truncate text-right">{match.team1}</span>
-                                <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                                <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden shrink-0 border border-slate-700">
                                   <Flag code={getFlagCode(match.team1)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
                                 </div>
                               </div>
 
                               {/* Inputs */}
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <div className="flex items-center gap-1.5 shrink-0">
                                 <input
                                   type="text"
                                   value={guess.score1}
@@ -799,7 +799,7 @@ export default function Dashboard() {
 
                               {/* Team B */}
                               <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden flex-shrink-0 border border-slate-700">
+                                <div className="w-8 h-5 bg-slate-900 rounded-sm overflow-hidden shrink-0 border border-slate-700">
                                   <Flag code={getFlagCode(match.team2)} className={`w-full h-full object-cover ${isEnded ? 'grayscale' : ''}`} />
                                 </div>
                                 <span className="font-bold text-xs sm:text-sm uppercase truncate text-left">{match.team2}</span>
@@ -921,7 +921,7 @@ export default function Dashboard() {
             </motion.div>
 
             {user && (
-              <div className="glass p-6 md:p-8 rounded-[32px] border-slate-800/80">
+              <div className="glass p-6 md:p-8 rounded-4xl border-slate-800/80">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
                     <History size={16} /> Evolução de Pontos
@@ -945,7 +945,7 @@ export default function Dashboard() {
 
             {/* Seção Mata-Mata e Pontos do Bolão */}
             {user && (
-              <div className="glass p-6 md:p-8 rounded-[32px] border-slate-800/80">
+              <div className="glass p-6 md:p-8 rounded-4xl border-slate-800/80">
                 <div className={`flex items-center justify-between ${collapsedCards['knockoutDetails'] ? '' : 'mb-6'}`}>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
@@ -1037,7 +1037,7 @@ export default function Dashboard() {
                             const stageMatches = stages[stage];
 
                             return (
-                              <div key={stage} className="border border-slate-800/80 rounded-[24px] overflow-hidden bg-slate-900/10">
+                              <div key={stage} className="border border-slate-800/80 rounded-3xl overflow-hidden bg-slate-900/10">
                                 <button
                                   onClick={() => toggleStageCollapse(stage)}
                                   className="w-full flex items-center justify-between p-4 bg-slate-900/30 hover:bg-slate-900/50 transition-colors text-left border-b border-slate-800/40"
@@ -1139,7 +1139,7 @@ export default function Dashboard() {
                                                       +{totalPts} pts
                                                     </span>
                                                     {breakdown.length > 0 && (
-                                                      <div className="flex flex-wrap gap-1 justify-end max-w-[150px]">
+                                                      <div className="flex flex-wrap gap-1 justify-end max-w-36">
                                                         {breakdown.map((item, bIdx) => (
                                                           <span
                                                             key={bIdx}
@@ -1182,7 +1182,7 @@ export default function Dashboard() {
 
             {/* Palpites do Torneio (Final e Extras) de Todos os Participantes */}
             {user && (
-              <div className="glass p-6 md:p-8 rounded-[32px] border-slate-800/80">
+              <div className="glass p-6 md:p-8 rounded-4xl border-slate-800/80">
                 <div className={`flex items-center justify-between ${collapsedCards['tournamentPredictions'] ? '' : 'mb-6'}`}>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
@@ -1217,7 +1217,7 @@ export default function Dashboard() {
 
                 {!collapsedCards['tournamentPredictions'] && (
                   <div className="overflow-x-auto w-full border border-slate-800/80 rounded-2xl bg-slate-950/10">
-                    <table className="w-full text-[10px] text-left border-collapse min-w-[900px]">
+                    <table className="w-full text-[10px] text-left border-collapse min-w-225">
                       <thead>
                         <tr className="border-b border-slate-800/80 bg-slate-900/30 text-slate-400 font-bold uppercase tracking-wider">
                           <th className="py-4 px-4 font-black">Participante</th>
@@ -1244,7 +1244,7 @@ export default function Dashboard() {
                                     p.full_name?.charAt(0) || '?'
                                   )}
                                 </div>
-                                <span className="truncate max-w-[120px]" title={p.full_name}>
+                                <span className="truncate max-w-30" title={p.full_name}>
                                   {p.full_name || p.username || 'Membro'}
                                 </span>
                               </td>
@@ -1303,7 +1303,7 @@ export default function Dashboard() {
 
           {/* Sidebar */}
           <div className="flex flex-col gap-8">
-            <section className="glass p-6 md:p-8 rounded-[32px]">
+            <section className="glass p-6 md:p-8 rounded-4xl">
               <div className={`flex items-center justify-between ${collapsedCards['top3'] ? '' : 'mb-6'}`}>
                 <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
                   <Trophy size={16} className="text-amber-500" /> OS 3 MELHORES
@@ -1354,7 +1354,7 @@ export default function Dashboard() {
               )}
             </section>
 
-            <section className={`glass p-6 md:p-8 rounded-[32px] flex flex-col ${collapsedCards['nextMatches'] ? '' : 'gap-6'}`}>
+            <section className={`glass p-6 md:p-8 rounded-4xl flex flex-col ${collapsedCards['nextMatches'] ? '' : 'gap-6'}`}>
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
                   <Calendar size={16} className="text-emerald-400" /> PRÓXIMOS 3 DIAS
@@ -1379,7 +1379,7 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center justify-between gap-4">
                             <div className="flex items-center gap-2 flex-1">
-                              <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800 flex-shrink-0">
+                              <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800 shrink-0">
                                 <Flag code={getFlagCode(match.team1)} className="w-full h-full object-cover" />
                               </div>
                               <span className="text-xs font-black text-slate-200 truncate">{match.team1}</span>
@@ -1387,7 +1387,7 @@ export default function Dashboard() {
                             <span className="text-[10px] font-black text-slate-600 italic">VS</span>
                             <div className="flex items-center gap-2 flex-1 justify-end">
                               <span className="text-xs font-black text-slate-200 truncate text-right">{match.team2}</span>
-                              <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800 flex-shrink-0">
+                              <div className="w-6 h-4 bg-slate-950 rounded-sm overflow-hidden border border-slate-800 shrink-0">
                                 <Flag code={getFlagCode(match.team2)} className="w-full h-full object-cover" />
                               </div>
                             </div>
@@ -1410,7 +1410,7 @@ export default function Dashboard() {
 
             {/* Taxa de Acerto e Rendimento */}
             {user && (
-              <div className={`glass p-6 md:p-8 rounded-[32px] flex flex-col ${collapsedCards['accuracyStats'] ? '' : 'gap-6'} border-slate-800/80`}>
+              <div className={`glass p-6 md:p-8 rounded-4xl flex flex-col ${collapsedCards['accuracyStats'] ? '' : 'gap-6'} border-slate-800/80`}>
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
@@ -1506,7 +1506,7 @@ export default function Dashboard() {
 
             {/* Meus Últimos Jogos */}
             {user && (
-              <div className={`glass p-6 md:p-8 rounded-[32px] flex flex-col ${collapsedCards['recentGuesses'] ? '' : 'gap-6'} border-slate-800/80`}>
+              <div className={`glass p-6 md:p-8 rounded-4xl flex flex-col ${collapsedCards['recentGuesses'] ? '' : 'gap-6'} border-slate-800/80`}>
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
@@ -1537,16 +1537,16 @@ export default function Dashboard() {
                           <div key={m.id} className="p-3 bg-slate-900/40 border border-slate-800/60 rounded-xl flex items-center justify-between gap-4">
                             <div className="flex flex-col gap-1 flex-1">
                               <div className="flex items-center gap-2 justify-between">
-                                <span className="text-[11px] font-bold text-slate-300 truncate max-w-[80px]">{m.team1}</span>
+                                <span className="text-[11px] font-bold text-slate-300 truncate max-w-20">{m.team1}</span>
                                 <span className="text-xs font-black text-white">{m.score1} - {m.score2}</span>
-                                <span className="text-[11px] font-bold text-slate-300 truncate max-w-[80px] text-right">{m.team2}</span>
+                                <span className="text-[11px] font-bold text-slate-300 truncate max-w-20 text-right">{m.team2}</span>
                               </div>
                               <div className="flex items-center justify-between text-[9px] font-medium text-slate-500">
                                 <span>Meu palpite: <strong className="text-slate-400">{m.guess?.score1} x {m.guess?.score2}</strong></span>
                               </div>
                             </div>
 
-                            <div className="flex-shrink-0 text-right">
+                            <div className="shrink-0 text-right">
                               <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${isExact
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                 : isOutcome
@@ -1571,7 +1571,7 @@ export default function Dashboard() {
 
             {/* Palpites de Grupo */}
             {user && (
-              <div className="glass p-6 md:p-8 rounded-[32px] border-slate-800/80">
+              <div className="glass p-6 md:p-8 rounded-4xl border-slate-800/80">
                 <div className={`flex items-center justify-between ${collapsedCards['groupPredictions'] ? '' : 'mb-6'}`}>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
@@ -1653,7 +1653,7 @@ export default function Dashboard() {
                               <div className="flex items-center justify-between">
                                 <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px]">3º Lugar</span>
                                 <div className="flex items-center gap-1.5">
-                                  <span className={`font-black uppercase tracking-tight ${pred.third_place_qualified ? 'text-amber-400' : 'text-slate-400'} line-clamp-1 max-w-[80px]`}>
+                                  <span className={`font-black uppercase tracking-tight ${pred.third_place_qualified ? 'text-amber-400' : 'text-slate-400'} line-clamp-1 max-w-20`}>
                                     {pred.third_place} {pred.third_place_qualified ? '⭐️' : ''}
                                   </span>
                                   {isGroupCompleted && (
