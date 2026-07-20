@@ -48,29 +48,20 @@ export default function EvolutionChart({ profileId }: EvolutionChartProps) {
     const fetchHistory = async () => {
       setLoading(true);
       try {
-        // 1. Buscar todos os perfis
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, full_name, username')
-          .order('points', { ascending: false });
+        // Buscar perfis, palpites e partidas finalizadas em paralelo
+        const [profilesRes, guessesRes, matchesRes] = await Promise.all([
+          supabase.from('profiles').select('id, full_name, username').order('points', { ascending: false }),
+          supabase.from('guesses').select('profile_id, points_earned, match_id'),
+          supabase.from('matches').select('id, team1, team2, score1, score2, date, time').not('score1', 'is', null).not('score2', 'is', null)
+        ]);
 
-        if (profilesError) throw profilesError;
+        if (profilesRes.error) throw profilesRes.error;
+        if (guessesRes.error) throw guessesRes.error;
+        if (matchesRes.error) throw matchesRes.error;
 
-        // 2. Buscar todos os palpites
-        const { data: allGuessesData, error: guessesError } = await supabase
-          .from('guesses')
-          .select('profile_id, points_earned, match_id');
-
-        if (guessesError) throw guessesError;
-
-        // 3. Buscar todas as partidas finalizadas
-        const { data: matchesData, error: matchesError } = await supabase
-          .from('matches')
-          .select('id, team1, team2, score1, score2, date, time')
-          .not('score1', 'is', null)
-          .not('score2', 'is', null);
-
-        if (matchesError) throw matchesError;
+        const profilesData = profilesRes.data;
+        const allGuessesData = guessesRes.data;
+        const matchesData = matchesRes.data;
 
         // 4. Mapear palpites por profile_id e match_id
         const guessesMap = new Map<string, Map<string, number>>();

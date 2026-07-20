@@ -187,67 +187,62 @@ export default function Dashboard() {
         if (currentUser) {
           setUser(currentUser);
 
-          // Fetch profile for points and full_name
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, points, ranking_position')
-            .eq('id', currentUser.id)
-            .single();
+          // Buscar todos os dados do banco de dados em paralelo para evitar gargalos/waterfall
+          const [
+            profileRes,
+            guessesRes,
+            top3Res,
+            groupPredsRes,
+            resultsRes,
+            userGroupsRes,
+            allProfilesRes,
+            allPredsRes,
+            tResultsRes,
+            matchesRes
+          ] = await Promise.all([
+            supabase.from('profiles').select('full_name, points, ranking_position').eq('id', currentUser.id).single(),
+            supabase.from('guesses').select('id, match_id, score1, score2, points_earned, yellow_cards_winner, has_red_card').eq('profile_id', currentUser.id),
+            supabase.from('profiles').select('id, full_name, points, avatar_url, username').order('points', { ascending: false }).limit(3),
+            supabase.from('group_predictions').select('*').eq('profile_id', currentUser.id),
+            supabase.from('group_results').select('*'),
+            supabase.from('group_members').select('group_id, groups(*)').eq('profile_id', currentUser.id),
+            supabase.from('profiles').select('id, full_name, username, avatar_url, points').order('points', { ascending: false }),
+            supabase.from('tournament_predictions').select('*'),
+            supabase.from('tournament_results').select('*').eq('id', 1).maybeSingle(),
+            supabase.from('matches').select('*').order('date', { ascending: true }).order('time', { ascending: true })
+          ]);
 
-          let computedRank = 1;
+          const profile = profileRes.data;
+          const guessesData = guessesRes.data;
+          const top3Data = top3Res.data;
+          const groupPreds = groupPredsRes.data;
+          const resultsData = resultsRes.data;
+          const userGroupsData = userGroupsRes.data;
+          const allProfilesData = allProfilesRes.data;
+          const allPredsData = allPredsRes.data;
+          const tResults = tResultsRes.data;
+          const matches = matchesRes.data;
+
           if (profile) {
             setProfileName(profile.full_name || currentUser.email?.split('@')[0] || '');
-
-            // Fetch rank position dynamically based on points
-            const { count: rankCount } = await supabase
-              .from('profiles')
-              .select('*', { count: 'exact', head: true })
-              .gt('points', profile.points || 0);
-
-            computedRank = rankCount !== null ? rankCount + 1 : 1;
-            setRankingPosition(computedRank);
           }
-
-          // Fetch user guesses for badges, points, and stats calculation
-          const { data: guessesData } = await supabase
-            .from('guesses')
-            .select('id, match_id, score1, score2, points_earned, yellow_cards_winner, has_red_card')
-            .eq('profile_id', currentUser.id);
 
           if (guessesData) {
             loadedGuesses = guessesData;
             setUserGuesses(guessesData);
           }
 
-          // Fetch top 3 ranking profiles
-          const { data: top3Data } = await supabase
-            .from('profiles')
-            .select('id, full_name, points, avatar_url, username')
-            .order('points', { ascending: false })
-            .limit(3);
-
           if (top3Data) {
             setTop3Profiles(top3Data);
           }
 
-          // Fetch user group predictions for badges
-          const { data: groupPreds } = await supabase
-            .from('group_predictions')
-            .select('*')
-            .eq('profile_id', currentUser.id);
-          if (groupPreds) setUserGroupPredictions(groupPreds);
+          if (groupPreds) {
+            setUserGroupPredictions(groupPreds);
+          }
 
-          // Fetch group results for badges
-          const { data: resultsData } = await supabase
-            .from('group_results')
-            .select('*');
-          if (resultsData) setGroupResults(resultsData);
-
-          // Fetch user's groups
-          const { data: userGroupsData } = await supabase
-            .from('group_members')
-            .select('group_id, groups(*)')
-            .eq('profile_id', currentUser.id);
+          if (resultsData) {
+            setGroupResults(resultsData);
+          }
 
           if (userGroupsData && userGroupsData.length > 0) {
             const processedGroups = userGroupsData.map((ug: any) => ug.groups).filter(Boolean);
@@ -255,31 +250,31 @@ export default function Dashboard() {
             setSelectedGroupId(processedGroups[0].id);
           }
 
-          // Fetch all profiles
-          const { data: allProfilesData } = await supabase
-            .from('profiles')
-            .select('id, full_name, username, avatar_url, points')
-            .order('points', { ascending: false });
-          if (allProfilesData) setAllProfiles(allProfilesData);
+          if (allProfilesData) {
+            setAllProfiles(allProfilesData);
+            
+            // Calcular posição de ranking dinamicamente a partir dos perfis carregados (evita query extra)
+            const userIndex = allProfilesData.findIndex((p: any) => p.id === currentUser.id);
+            const computedRank = userIndex !== -1 ? userIndex + 1 : 1;
+            setRankingPosition(computedRank);
+          }
 
-          // Fetch all tournament predictions
-          const { data: allPredsData } = await supabase
-            .from('tournament_predictions')
-            .select('*');
-          if (allPredsData) setAllTournamentPredictions(allPredsData);
+          if (allPredsData) {
+            setAllTournamentPredictions(allPredsData);
+          }
 
-          // Fetch official tournament results
-          const { data: tResults } = await supabase
-            .from('tournament_results')
-            .select('*')
-            .eq('id', 1)
-            .maybeSingle();
-          if (tResults) setTournamentResults(tResults);
+          if (tResults) {
+            setTournamentResults(tResults);
+          }
 
           // Update initial stats
           const totalPoints = profile?.points || 0;
           const matchGuessesPoints = guessesData ? guessesData.reduce((acc: number, curr: any) => acc + (curr.points_earned || 0), 0) : 0;
           const classificationPoints = Math.max(0, totalPoints - matchGuessesPoints);
+
+          // Calcular posição de ranking final
+          const userIndex = allProfilesData ? allProfilesData.findIndex((p: any) => p.id === currentUser.id) : -1;
+          const computedRank = userIndex !== -1 ? userIndex + 1 : 1;
 
           setStats([
             { label: 'Pontos Totais', value: String(totalPoints), icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
@@ -292,14 +287,7 @@ export default function Dashboard() {
           return;
         }
 
-        // Fetch matches
-        const { data: matches } = await supabase
-          .from('matches')
-          .select('*')
-          .order('date', { ascending: true })
-          .order('time', { ascending: true });
-
-        const rawMatches = (matches && matches.length > 0) ? matches : WORLD_CUP_DATA.matches;
+        const rawMatches = (matchesRes.data && matchesRes.data.length > 0) ? matchesRes.data : WORLD_CUP_DATA.matches;
         loadedMatches = mapMatchesToBrazil(rawMatches);
         setAllMatches(loadedMatches);
 
