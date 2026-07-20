@@ -682,12 +682,12 @@ export default function AdminPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md"
+              className="fixed inset-0 z-100 flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md"
             >
               <motion.div
                 initial={{ scale: 0.9, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
-                className="glass w-full max-w-2xl p-6 sm:p-10 rounded-[24px] sm:rounded-[40px] max-h-[90vh] overflow-y-auto shadow-2xl shadow-emerald-500/10"
+                className="glass w-full max-w-2xl p-6 sm:p-10 rounded-3xl sm:rounded-[40px] max-h-[90vh] overflow-y-auto shadow-2xl shadow-emerald-500/10"
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-3xl font-black uppercase tracking-tighter">
@@ -1068,7 +1068,7 @@ export default function AdminPage() {
                 {stats.map((stat, i) => (
                   <div
                     key={stat.label}
-                    className="glass p-8 rounded-[32px] flex items-center justify-between"
+                    className="glass p-8 rounded-4xl flex items-center justify-between"
                   >
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">{stat.label}</p>
@@ -1231,7 +1231,7 @@ export default function AdminPage() {
                   {!filterPending && (
                     <button 
                       onClick={() => setFilterPending(true)}
-                      className="px-4 py-2 bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-400 transition-all shrink-0 font-bold"
+                      className="px-4 py-2 bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-400 transition-all shrink-0"
                     >
                       Filtrar Pendentes
                     </button>
@@ -1413,20 +1413,20 @@ export default function AdminPage() {
                   <div key={m.id} className="flex flex-col md:flex-row items-center justify-between p-4 sm:p-6 bg-slate-900/50 rounded-2xl border border-slate-800 group hover:border-amber-500/30 transition-all gap-4 sm:gap-6 w-full">
                     <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 flex-1 w-full">
                       {/* Data e Hora */}
-                      <div className="text-center min-w-[60px] bg-slate-950/40 px-3 py-1.5 rounded-lg border border-slate-800/40 w-full sm:w-auto">
+                      <div className="text-center min-w-15 bg-slate-950/40 px-3 py-1.5 rounded-lg border border-slate-800/40 w-full sm:w-auto">
                         <p className="text-xs font-black text-emerald-400">{formatMatchDate(m.date)}</p>
                         <p className="text-[10px] font-bold text-slate-500">{formatMatchTime(m.time)}</p>
                       </div>
 
                       {/* Equipes e Placar */}
                       <div className="flex items-center justify-between gap-3 flex-1 w-full">
-                        <span className="font-black text-xs sm:text-sm uppercase flex-1 text-right truncate max-w-[120px] sm:max-w-none">{m.team1}</span>
+                        <span className="font-black text-xs sm:text-sm uppercase flex-1 text-right truncate max-w-30 sm:max-w-none">{m.team1}</span>
                         <div className="flex items-center gap-1.5 shrink-0">
                            <input type="text" value={m.score1 !== null && m.score1 !== undefined ? m.score1 : ''} className="w-9 h-9 sm:w-10 sm:h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none text-sm sm:text-base" readOnly />
                            <span className="text-slate-700 italic text-xs sm:text-sm font-black">X</span>
                            <input type="text" value={m.score2 !== null && m.score2 !== undefined ? m.score2 : ''} className="w-9 h-9 sm:w-10 sm:h-10 bg-slate-950 border border-slate-800 rounded-lg text-center font-bold text-amber-500 outline-none text-sm sm:text-base" readOnly />
                         </div>
-                        <span className="font-black text-xs sm:text-sm uppercase flex-1 text-left truncate max-w-[120px] sm:max-w-none">{m.team2}</span>
+                        <span className="font-black text-xs sm:text-sm uppercase flex-1 text-left truncate max-w-30 sm:max-w-none">{m.team2}</span>
                       </div>
                     </div>
 
@@ -1443,7 +1443,7 @@ export default function AdminPage() {
                 return (
                   <div className="space-y-12">
                     {visibleMatches.length === 0 ? (
-                      <div className="py-20 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-[32px]">
+                      <div className="py-20 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-4xl">
                         <Calendar size={48} className="mx-auto mb-4 text-emerald-500/50 animate-pulse" />
                         <p className="text-xs font-black uppercase tracking-[0.2em] mb-2">Nenhum jogo pendente</p>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -1534,7 +1534,7 @@ export default function AdminPage() {
                     )}
 
                     {data.matches.length === 0 && (
-                      <div className="py-20 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-[32px]">
+                      <div className="py-20 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-4xl">
                         <AlertTriangle size={48} className="mx-auto mb-4 text-amber-500/50" />
                         <p className="text-xs font-black uppercase tracking-[0.2em] mb-6">Tabela de jogos vazia</p>
                         <button onClick={handleSyncMatches} className="px-8 py-4 bg-emerald-500 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest">Sincronizar Dados Iniciais</button>
@@ -1567,7 +1567,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {data.groups.map(group => (
-                  <div key={group.id} className="p-8 bg-slate-900/50 rounded-[32px] border border-slate-800 group hover:border-cyan-500/30 transition-all">
+                  <div key={group.id} className="p-8 bg-slate-900/50 rounded-4xl border border-slate-800 group hover:border-cyan-500/30 transition-all">
                     <div className="flex justify-between items-start mb-6">
                       <div>
                         <h3 className="text-xl font-black uppercase tracking-tight mb-1">{group.name}</h3>
